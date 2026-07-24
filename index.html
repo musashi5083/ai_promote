@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mermaid 矢印エディタ (MVP)</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #d9dde3;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --danger: #dc2626;
+    --text: #1f2937;
+    --muted: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .mode-btn {
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .mode-btn.danger.active { background: var(--danger); border-color: var(--danger); }
+  .status { font-size: 13px; color: var(--muted); margin-left: auto; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  .col { display: flex; flex-direction: column; min-width: 0; }
+  .col.code { width: 38%; border-right: 1px solid var(--border); }
+  .col.view { flex: 1; }
+  .col-head {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  textarea {
+    flex: 1;
+    border: 0;
+    resize: none;
+    padding: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    outline: none;
+    background: #fbfbfc;
+  }
+  #diagram {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    background:
+      linear-gradient(90deg, rgba(0,0,0,.03) 1px, transparent 1px) 0 0/24px 24px,
+      linear-gradient(rgba(0,0,0,.03) 1px, transparent 1px) 0 0/24px 24px;
+  }
+  #diagram svg { max-width: 100%; height: auto; }
+
+  /* interaction cues */
+  .picking .node * { cursor: crosshair; }
+  .node.pick-source > *:first-child { stroke: var(--accent) !important; stroke-width: 3px !important; }
+  .node.hoverable > *:first-child { filter: drop-shadow(0 0 3px var(--accent)); }
+  .hit { cursor: pointer; }
+  .hit.hoverable { stroke: var(--danger) !important; opacity: .35 !important; }
+
+  .hint { font-size: 12px; color: var(--muted); }
+  .error {
+    color: var(--danger);
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    padding: 12px;
+    white-space: pre-wrap;
+  }
+  footer {
+    padding: 6px 16px;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🔀 Mermaid 矢印エディタ</h1>
+    <div class="toolbar" id="toolbar">
+      <span class="hint">モード:</span>
+      <button class="mode-btn active" data-mode="select">選択</button>
+      <button class="mode-btn" data-mode="add">＋ 矢印を追加</button>
+      <button class="mode-btn danger" data-mode="delete">－ 矢印を削除</button>
+    </div>
+    <span class="status" id="status">図のノードや矢印を操作するとコードに反映されます</span>
+  </header>
+
+  <main>
+    <section class="col code">
+      <div class="col-head">
+        <span>Mermaid コード</span>
+        <span class="hint">編集すると図に反映</span>
+      </div>
+      <textarea id="code" spellcheck="false"></textarea>
+    </section>
+    <section class="col view">
+      <div class="col-head">
+        <span>プレビュー</span>
+        <span class="hint" id="view-hint"></span>
+      </div>
+      <div id="diagram"></div>
+    </section>
+  </main>
+
+  <footer>MVP: flowchart / graph の矢印追加・削除に対応。双方向同期（コード ⇄ 図）。</footer>
+
+<script src="vendor/mermaid.min.js"></script>
+<script type="module">
+// mermaid v9 (vendored, offline). Global `mermaid` from the UMD bundle above.
+mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { curve: 'basis' } });
+
+// v9 render can be callback- or promise-based depending on build; wrap uniformly.
+function renderMermaid(id, src) {
+  return new Promise((resolve, reject) => {
+    try {
+      const ret = mermaid.render(id, src, (svg) => resolve(svg));
+      if (ret && typeof ret.then === 'function') ret.then(r => resolve(r.svg ?? r)).catch(reject);
+      else if (typeof ret === 'string') resolve(ret);
+    } catch (e) { reject(e); }
+  });
+}
+
+const codeEl    = document.getElementById('code');
+const diagramEl = document.getElementById('diagram');
+const statusEl  = document.getElementById('status');
+const toolbar   = document.getElementById('toolbar');
+
+let mode = 'select';       // 'select' | 'add' | 'delete'
+let pickSource = null;     // node id chosen as arrow start
+let model = null;          // parsed { direction, nodes, edges }
+let renderSeq = 0;
+
+/* ---------------- Parser: Mermaid flowchart -> model ---------------- */
+// Supported subset: flowchart/graph <dir>, node shapes []/()/{}, chained edges,
+// connectors --> --- -.-> -.- ==> === --o --x, optional |label|.
+
+const SHAPES = [
+  { open: '([', close: '])', name: 'stadium' },
+  { open: '[[', close: ']]', name: 'subroutine' },
+  { open: '((', close: '))', name: 'circle' },
+  { open: '{{', close: '}}', name: 'hexagon' },
+  { open: '[',  close: ']',  name: 'rect' },
+  { open: '(',  close: ')',  name: 'round' },
+  { open: '{',  close: '}',  name: 'diamond' },
+];
+const CONNECTORS = ['-.->', '-.-', '==>', '===', '-->', '---', '--o', '--x', 'o--o', 'x--x'];
+
+function parse(src) {
+  const lines = src.split('\n');
+  let direction = 'TD';
+  const nodes = new Map();   // id -> { id, label, shape }
+  const edges = [];          // { from, to, connector, label }
+
+  const ensureNode = (id) => {
+    if (!nodes.has(id)) nodes.set(id, { id, label: null, shape: 'rect' });
+    return nodes.get(id);
+  };
+
+  for (let raw of lines) {
+    let line = raw.replace(/%%.*$/, '').trim();   // strip comments
+    if (!line) continue;
+
+    const head = line.match(/^(flowchart|graph)\s+([A-Za-z]{2})\b/i);
+    if (head) { direction = head[2].toUpperCase(); continue; }
+    if (/^(subgraph|end|classDef|class|style|linkStyle|click)\b/i.test(line)) continue;
+
+    parseStatement(line, ensureNode, edges);
+  }
+  return { direction, nodes, edges };
+}
+
+function parseStatement(line, ensureNode, edges) {
+  let pos = 0;
+  const readNode = () => {
+    const m = line.slice(pos).match(/^\s*([A-Za-z0-9_\-]+)/);
+    if (!m) return null;
+    let id = m[1];
+    pos += m[0].length;
+    let label = null, shape = 'rect';
+    for (const s of SHAPES) {
+      if (line.startsWith(s.open, pos)) {
+        const closeAt = line.indexOf(s.close, pos + s.open.length);
+        if (closeAt !== -1) {
+          label = line.slice(pos + s.open.length, closeAt).replace(/^"|"$/g, '');
+          shape = s.name;
+          pos = closeAt + s.close.length;
+        }
+        break;
+      }
+    }
+    const node = ensureNode(id);
+    if (label !== null) { node.label = label; node.shape = shape; }
+    return id;
+  };
+  const readConnector = () => {
+    const rest = line.slice(pos);
+    const m = rest.match(/^\s*(-\.[-]*->|-\.[-]*-|=+>|=+|-+>|-+|--o|--x|o--o|x--x)\s*/);
+    if (!m) return null;
+    let conn = m[1].replace(/\s+/g, '');
+    // normalize to a known token
+    let connector = CONNECTORS.find(c => c === conn) || normalizeConnector(conn);
+    pos += m[0].length;
+    let label = null;
+    const lm = line.slice(pos).match(/^\|([^|]*)\|\s*/);
+    if (lm) { label = lm[1].replace(/^"|"$/g, ''); pos += lm[0].length; }
+    return { connector, label };
+  };
+
+  let from = readNode();
+  if (from === null) return;
+  while (pos < line.length) {
+    const c = readConnector();
+    if (!c) break;
+    const to = readNode();
+    if (to === null) break;
+    edges.push({ from, to, connector: c.connector, label: c.label });
+    from = to;
+  }
+}
+
+function normalizeConnector(conn) {
+  if (conn.startsWith('-.') && conn.endsWith('>')) return '-.->';
+  if (conn.startsWith('-.')) return '-.-';
+  if (conn.startsWith('=') && conn.endsWith('>')) return '==>';
+  if (conn.startsWith('=')) return '===';
+  if (conn.endsWith('>')) return '-->';
+  return '---';
+}
+
+/* ---------------- Serializer: model -> Mermaid ---------------- */
+const SHAPE_WRAP = {
+  rect:       (l) => `[${l}]`,
+  round:      (l) => `(${l})`,
+  diamond:    (l) => `{${l}}`,
+  stadium:    (l) => `([${l}])`,
+  subroutine: (l) => `[[${l}]]`,
+  circle:     (l) => `((${l}))`,
+  hexagon:    (l) => `{{${l}}}`,
+};
+
+function serialize(m) {
+  const out = [`flowchart ${m.direction}`];
+  // node declarations (only those with an explicit label)
+  for (const node of m.nodes.values()) {
+    if (node.label !== null) {
+      const wrap = SHAPE_WRAP[node.shape] || SHAPE_WRAP.rect;
+      out.push(`    ${node.id}${wrap(node.label)}`);
+    }
+  }
+  for (const e of m.edges) {
+    const mid = e.label ? `${e.connector}|${e.label}|` : e.connector;
+    out.push(`    ${e.from} ${mid} ${e.to}`);
+  }
+  return out.join('\n');
+}
+
+/* ---------------- Rendering ---------------- */
+async function render(src) {
+  const seq = ++renderSeq;
+  try {
+    const svg = await renderMermaid('theGraph_' + seq, src);
+    if (seq !== renderSeq) return;               // a newer render won
+    diagramEl.innerHTML = svg;
+    wireDiagram();
+  } catch (err) {
+    if (seq !== renderSeq) return;
+    diagramEl.innerHTML = `<div class="error">⚠ 図を描画できません\n${(err && err.message) || err}</div>`;
+  }
+}
+
+// Extract original node id from a mermaid <g class="node" id="flowchart-<id>-<n>">
+function svgNodeId(g) {
+  const id = g.id || '';
+  const m = id.match(/^flowchart-(.+)-\d+$/);
+  return m ? m[1] : null;
+}
+
+function wireDiagram() {
+  const svg = diagramEl.querySelector('svg');
+  if (!svg) return;
+  svg.classList.toggle('picking', mode === 'add');
+
+  // --- nodes (used in add mode) ---
+  svg.querySelectorAll('g.node').forEach(g => {
+    const id = svgNodeId(g);
+    if (id == null) return;
+    g.style.cursor = mode === 'add' ? 'crosshair' : '';
+    g.classList.toggle('pick-source', mode === 'add' && pickSource === id);
+    g.classList.toggle('hoverable', false);
+    g.onclick = null;
+    if (mode === 'add') g.onclick = (ev) => { ev.stopPropagation(); onNodeClick(id); };
+  });
+
+  // --- edges (used in delete mode): add transparent thick hit paths ---
+  const edgePaths = svg.querySelectorAll('g.edgePaths > path.flowchart-link, g.edgePaths > path');
+  edgePaths.forEach((path, i) => {
+    if (mode !== 'delete') return;
+    const hit = path.cloneNode(true);
+    hit.classList.add('hit');
+    hit.setAttribute('fill', 'none');
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '14');
+    hit.style.pointerEvents = 'stroke';
+    hit.addEventListener('mouseenter', () => hit.classList.add('hoverable'));
+    hit.addEventListener('mouseleave', () => hit.classList.remove('hoverable'));
+    hit.addEventListener('click', (ev) => { ev.stopPropagation(); onEdgeClick(i); });
+    path.parentNode.appendChild(hit);
+  });
+}
+
+/* ---------------- GUI actions ---------------- */
+function onNodeClick(id) {
+  if (pickSource === null) {
+    pickSource = id;
+    setStatus(`始点: ${id} — 次に終点のノードをクリック`);
+    wireDiagram();
+    return;
+  }
+  if (pickSource === id) {                        // clicking same node cancels
+    pickSource = null;
+    setStatus('始点の選択を解除しました');
+    wireDiagram();
+    return;
+  }
+  model.edges.push({ from: pickSource, to: id, connector: '-->', label: null });
+  const created = `${pickSource} --> ${id}`;
+  pickSource = null;
+  commitModel();
+  setStatus(`矢印を追加: ${created}`);
+}
+
+function onEdgeClick(index) {
+  const e = model.edges[index];
+  if (!e) return;
+  model.edges.splice(index, 1);
+  commitModel();
+  setStatus(`矢印を削除: ${e.from} ${e.connector} ${e.to}`);
+}
+
+// Write model back to code (canonical) and re-render.
+function commitModel() {
+  const src = serialize(model);
+  codeEl.value = src;
+  render(src);
+}
+
+/* ---------------- Wiring ---------------- */
+function setStatus(msg) { statusEl.textContent = msg; }
+
+let debounce;
+codeEl.addEventListener('input', () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => {
+    model = parse(codeEl.value);
+    pickSource = null;
+    render(codeEl.value);
+  }, 200);
+});
+
+toolbar.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.mode-btn');
+  if (!btn) return;
+  mode = btn.dataset.mode;
+  pickSource = null;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+  const hints = {
+    select: '図のノードや矢印を操作するとコードに反映されます',
+    add: '始点ノード → 終点ノードの順にクリックで矢印を追加',
+    delete: '削除したい矢印をクリック',
+  };
+  setStatus(hints[mode]);
+  wireDiagram();
+});
+
+// cancel add-selection when clicking empty area
+diagramEl.addEventListener('click', (ev) => {
+  if (mode === 'add' && pickSource && ev.target === diagramEl) {
+    pickSource = null; setStatus('始点の選択を解除しました'); wireDiagram();
+  }
+});
+
+/* ---------------- Boot ---------------- */
+const SAMPLE = `flowchart TD
+    A[受注] --> B[在庫確認]
+    B --> C{在庫あり?}
+    C -->|Yes| D[出荷]
+    C -->|No| E[発注]
+    E --> B
+    D --> F[請求]`;
+
+codeEl.value = SAMPLE;
+model = parse(SAMPLE);
+render(SAMPLE);
+</script>
+</body>
+</html>
