@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Mermaid 矢印エディタ (MVP)</title>
+<title>Mermaid フロー エディタ</title>
 <style>
   :root {
     --bg: #f5f6f8;
@@ -14,6 +14,7 @@
     --danger: #dc2626;
     --text: #1f2937;
     --muted: #6b7280;
+    --shadow: 0 4px 16px rgba(15,23,42,.14);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -25,127 +26,152 @@
     flex-direction: column;
   }
   header {
-    padding: 10px 16px;
+    padding: 8px 14px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
-  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
-  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .mode-btn {
-    border: 1px solid var(--border);
-    background: #fff;
-    color: var(--text);
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
+  header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 700; white-space: nowrap; }
+  .tbtn {
+    border: 1px solid var(--border); background: #fff; color: var(--text);
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 5px;
   }
-  .mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .mode-btn.danger.active { background: var(--danger); border-color: var(--danger); }
-  .status { font-size: 13px; color: var(--muted); margin-left: auto; }
+  .tbtn:hover { background: #f0f2f5; }
+  .tbtn:disabled { opacity: .4; cursor: default; }
+  .sep { width: 1px; height: 22px; background: var(--border); margin: 0 2px; }
+  select.dir { border: 1px solid var(--border); border-radius: 6px; padding: 5px 6px; font-size: 13px; }
+  .grow { flex: 1; }
 
   main { flex: 1; display: flex; min-height: 0; }
   .col { display: flex; flex-direction: column; min-width: 0; }
-  .col.code { width: 38%; border-right: 1px solid var(--border); }
+  .col.code { width: 34%; border-right: 1px solid var(--border); }
   .col.view { flex: 1; }
   .col-head {
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--muted);
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
+    padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--muted);
+    background: var(--panel); border-bottom: 1px solid var(--border);
     display: flex; justify-content: space-between; align-items: center;
   }
   textarea {
-    flex: 1;
-    border: 0;
-    resize: none;
-    padding: 12px;
+    flex: 1; border: 0; resize: none; padding: 12px;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    outline: none;
-    background: #fbfbfc;
+    font-size: 13px; line-height: 1.6; outline: none; background: #fbfbfc;
   }
   #diagram {
-    flex: 1;
-    overflow: auto;
-    padding: 16px;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
+    flex: 1; overflow: auto; padding: 20px; position: relative;
+    display: flex; align-items: flex-start; justify-content: center;
     background:
       linear-gradient(90deg, rgba(0,0,0,.03) 1px, transparent 1px) 0 0/24px 24px,
       linear-gradient(rgba(0,0,0,.03) 1px, transparent 1px) 0 0/24px 24px;
   }
-  #diagram svg { max-width: 100%; height: auto; }
+  #diagram svg { max-width: 100%; height: auto; user-select: none; }
 
-  /* interaction cues */
-  .picking .node * { cursor: crosshair; }
-  .node.pick-source > *:first-child { stroke: var(--accent) !important; stroke-width: 3px !important; }
-  .node.hoverable > *:first-child { filter: drop-shadow(0 0 3px var(--accent)); }
-  .hit { cursor: pointer; }
-  .hit.hoverable { stroke: var(--danger) !important; opacity: .35 !important; }
+  /* interaction states */
+  g.node { cursor: pointer; }
+  g.node.selected > *:first-child { stroke: var(--accent) !important; stroke-width: 3px !important; }
+  g.node.arrow-target > *:first-child { stroke: var(--accent) !important; stroke-width: 3px !important; filter: drop-shadow(0 0 4px var(--accent)); }
+  path.hit { cursor: pointer; }
+  path.edge-selected { stroke: var(--accent) !important; stroke-width: 3px !important; }
 
-  .hint { font-size: 12px; color: var(--muted); }
-  .error {
-    color: var(--danger);
-    font-family: ui-monospace, monospace;
-    font-size: 12px;
-    padding: 12px;
-    white-space: pre-wrap;
+  .error { color: var(--danger); font-family: ui-monospace, monospace; font-size: 12px; padding: 12px; white-space: pre-wrap; }
+  .hintbar {
+    padding: 6px 14px; font-size: 12px; color: var(--muted);
+    background: var(--panel); border-top: 1px solid var(--border);
+    display: flex; gap: 16px; flex-wrap: wrap;
   }
-  footer {
-    padding: 6px 16px;
-    font-size: 11px;
-    color: var(--muted);
-    background: var(--panel);
-    border-top: 1px solid var(--border);
+  .hintbar b { color: var(--text); font-weight: 600; }
+
+  /* overlays */
+  #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+  #inline-edit {
+    position: fixed; z-index: 60; display: none;
+    border: 2px solid var(--accent); border-radius: 6px; padding: 3px 6px;
+    font: 500 14px/1.3 system-ui, sans-serif; text-align: center; outline: none;
+    background: #fff; box-shadow: var(--shadow); min-width: 60px;
   }
+  #ctx-menu {
+    position: fixed; z-index: 70; display: none; min-width: 168px;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 4px; font-size: 13px;
+  }
+  #ctx-menu .item { padding: 7px 10px; border-radius: 5px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  #ctx-menu .item:hover { background: var(--accent-soft); }
+  #ctx-menu .item.danger { color: var(--danger); }
+  #ctx-menu .label { padding: 4px 10px; font-size: 11px; color: var(--muted); }
+  #ctx-menu .divider { height: 1px; background: var(--border); margin: 4px 2px; }
+  #ctx-menu .row { display: flex; gap: 4px; padding: 2px 6px 6px; }
+  #ctx-menu .chip {
+    flex: 1; text-align: center; border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 0; cursor: pointer; font-size: 16px; line-height: 1;
+  }
+  #ctx-menu .chip:hover { background: var(--accent-soft); border-color: var(--accent); }
+  #ctx-menu .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* floating toolbar shown above a selected node */
+  #node-tools {
+    position: fixed; z-index: 55; display: none; gap: 4px; align-items: center;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 4px;
+  }
+  #node-tools button {
+    border: 1px solid transparent; background: none; cursor: pointer; border-radius: 5px;
+    padding: 4px 6px; font-size: 16px; line-height: 1; color: var(--text);
+  }
+  #node-tools button:hover { background: #f0f2f5; }
+  #node-tools button.on { background: var(--accent); color: #fff; }
+  #node-tools button.del:hover { background: #fde8e8; color: var(--danger); }
+  #node-tools .vsep { width: 1px; align-self: stretch; background: var(--border); margin: 2px; }
+  #node-tools .tip { font-size: 11px; color: var(--muted); padding: 0 6px 0 2px; white-space: nowrap; }
 </style>
 </head>
 <body>
   <header>
-    <h1>🔀 Mermaid 矢印エディタ</h1>
-    <div class="toolbar" id="toolbar">
-      <span class="hint">モード:</span>
-      <button class="mode-btn active" data-mode="select">選択</button>
-      <button class="mode-btn" data-mode="add">＋ 矢印を追加</button>
-      <button class="mode-btn danger" data-mode="delete">－ 矢印を削除</button>
-    </div>
-    <span class="status" id="status">図のノードや矢印を操作するとコードに反映されます</span>
+    <h1>🗺️ Mermaid フロー エディタ</h1>
+    <button class="tbtn" id="btn-add">＋ ノード</button>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-undo" title="元に戻す (Ctrl+Z)">↶</button>
+    <button class="tbtn" id="btn-redo" title="やり直し (Ctrl+Y)">↷</button>
+    <div class="sep"></div>
+    <label class="tip" style="font-size:12px;color:var(--muted)">向き
+      <select class="dir" id="dir">
+        <option value="TD">上→下 (TD)</option>
+        <option value="LR">左→右 (LR)</option>
+        <option value="BT">下→上 (BT)</option>
+        <option value="RL">右→左 (RL)</option>
+      </select>
+    </label>
+    <div class="grow"></div>
+    <button class="tbtn" id="btn-copy">📋 コードをコピー</button>
   </header>
 
   <main>
     <section class="col code">
-      <div class="col-head">
-        <span>Mermaid コード</span>
-        <span class="hint">編集すると図に反映</span>
-      </div>
+      <div class="col-head"><span>Mermaid コード</span><span style="color:var(--muted)">編集で図に反映</span></div>
       <textarea id="code" spellcheck="false"></textarea>
     </section>
     <section class="col view">
-      <div class="col-head">
-        <span>プレビュー</span>
-        <span class="hint" id="view-hint"></span>
-      </div>
+      <div class="col-head"><span>プレビュー</span><span id="view-hint" style="color:var(--muted)"></span></div>
       <div id="diagram"></div>
     </section>
   </main>
 
-  <footer>MVP: flowchart / graph の矢印追加・削除に対応。双方向同期（コード ⇄ 図）。</footer>
+  <div class="hintbar">
+    <span><b>ドラッグ</b> ノードから矢印を引く（空白へ離すと新ノード生成）</span>
+    <span><b>ダブルクリック</b> 文字を編集</span>
+    <span><b>右クリック</b> メニュー</span>
+    <span><b>Delete</b> 削除</span>
+  </div>
+
+  <!-- overlays -->
+  <svg id="overlay"></svg>
+  <input id="inline-edit" />
+  <div id="ctx-menu"></div>
+  <div id="node-tools"></div>
 
 <script src="vendor/mermaid.min.js"></script>
 <script type="module">
-// mermaid v9 (vendored, offline). Global `mermaid` from the UMD bundle above.
 mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { curve: 'basis' } });
 
-// v9 render can be callback- or promise-based depending on build; wrap uniformly.
 function renderMermaid(id, src) {
   return new Promise((resolve, reject) => {
     try {
@@ -156,20 +182,24 @@ function renderMermaid(id, src) {
   });
 }
 
+/* ================= DOM refs ================= */
 const codeEl    = document.getElementById('code');
 const diagramEl = document.getElementById('diagram');
-const statusEl  = document.getElementById('status');
-const toolbar   = document.getElementById('toolbar');
+const overlay   = document.getElementById('overlay');
+const editEl    = document.getElementById('inline-edit');
+const ctxEl     = document.getElementById('ctx-menu');
+const toolsEl   = document.getElementById('node-tools');
+const dirSel    = document.getElementById('dir');
 
-let mode = 'select';       // 'select' | 'add' | 'delete'
-let pickSource = null;     // node id chosen as arrow start
-let model = null;          // parsed { direction, nodes, edges }
+/* ================= State ================= */
+let model = null;                 // source of truth
+let selected = null;              // {kind:'node', id} | {kind:'edge', index}
 let renderSeq = 0;
+let idCounter = 0;
+const undoStack = [];
+const redoStack = [];
 
-/* ---------------- Parser: Mermaid flowchart -> model ---------------- */
-// Supported subset: flowchart/graph <dir>, node shapes []/()/{}, chained edges,
-// connectors --> --- -.-> -.- ==> === --o --x, optional |label|.
-
+/* ================= Parser ================= */
 const SHAPES = [
   { open: '([', close: '])', name: 'stadium' },
   { open: '[[', close: ']]', name: 'subroutine' },
@@ -179,69 +209,59 @@ const SHAPES = [
   { open: '(',  close: ')',  name: 'round' },
   { open: '{',  close: '}',  name: 'diamond' },
 ];
-const CONNECTORS = ['-.->', '-.-', '==>', '===', '-->', '---', '--o', '--x', 'o--o', 'x--x'];
+
+function unquote(s) {
+  if (s == null) return s;
+  s = s.replace(/#quot;/g, '"');
+  return s.replace(/^"|"$/g, '');
+}
 
 function parse(src) {
   const lines = src.split('\n');
   let direction = 'TD';
-  const nodes = new Map();   // id -> { id, label, shape }
-  const edges = [];          // { from, to, connector, label }
-
-  const ensureNode = (id) => {
-    if (!nodes.has(id)) nodes.set(id, { id, label: null, shape: 'rect' });
-    return nodes.get(id);
-  };
+  const nodes = new Map();
+  const edges = [];
+  const ensure = (id) => { if (!nodes.has(id)) nodes.set(id, { id, label: null, shape: 'rect' }); return nodes.get(id); };
 
   for (let raw of lines) {
-    let line = raw.replace(/%%.*$/, '').trim();   // strip comments
+    let line = raw.replace(/%%.*$/, '').trim();
     if (!line) continue;
-
     const head = line.match(/^(flowchart|graph)\s+([A-Za-z]{2})\b/i);
     if (head) { direction = head[2].toUpperCase(); continue; }
     if (/^(subgraph|end|classDef|class|style|linkStyle|click)\b/i.test(line)) continue;
-
-    parseStatement(line, ensureNode, edges);
+    parseStatement(line, ensure, edges);
   }
   return { direction, nodes, edges };
 }
 
-function parseStatement(line, ensureNode, edges) {
+function parseStatement(line, ensure, edges) {
   let pos = 0;
   const readNode = () => {
     const m = line.slice(pos).match(/^\s*([A-Za-z0-9_\-]+)/);
     if (!m) return null;
-    let id = m[1];
-    pos += m[0].length;
+    let id = m[1]; pos += m[0].length;
     let label = null, shape = 'rect';
     for (const s of SHAPES) {
       if (line.startsWith(s.open, pos)) {
         const closeAt = line.indexOf(s.close, pos + s.open.length);
-        if (closeAt !== -1) {
-          label = line.slice(pos + s.open.length, closeAt).replace(/^"|"$/g, '');
-          shape = s.name;
-          pos = closeAt + s.close.length;
-        }
+        if (closeAt !== -1) { label = unquote(line.slice(pos + s.open.length, closeAt)); shape = s.name; pos = closeAt + s.close.length; }
         break;
       }
     }
-    const node = ensureNode(id);
-    if (label !== null) { node.label = label; node.shape = shape; }
+    const n = ensure(id);
+    if (label !== null) { n.label = label; n.shape = shape; }
     return id;
   };
   const readConnector = () => {
-    const rest = line.slice(pos);
-    const m = rest.match(/^\s*(-\.[-]*->|-\.[-]*-|=+>|=+|-+>|-+|--o|--x|o--o|x--x)\s*/);
+    const m = line.slice(pos).match(/^\s*(-\.[-]*->|-\.[-]*-|=+>|=+|-+>|-+|--o|--x|o--o|x--x)\s*/);
     if (!m) return null;
-    let conn = m[1].replace(/\s+/g, '');
-    // normalize to a known token
-    let connector = CONNECTORS.find(c => c === conn) || normalizeConnector(conn);
+    const connector = normalizeConnector(m[1].replace(/\s+/g, ''));
     pos += m[0].length;
     let label = null;
     const lm = line.slice(pos).match(/^\|([^|]*)\|\s*/);
-    if (lm) { label = lm[1].replace(/^"|"$/g, ''); pos += lm[0].length; }
+    if (lm) { label = unquote(lm[1]); pos += lm[0].length; }
     return { connector, label };
   };
-
   let from = readNode();
   if (from === null) return;
   while (pos < line.length) {
@@ -263,170 +283,418 @@ function normalizeConnector(conn) {
   return '---';
 }
 
-/* ---------------- Serializer: model -> Mermaid ---------------- */
+/* ================= Serializer ================= */
 const SHAPE_WRAP = {
-  rect:       (l) => `[${l}]`,
-  round:      (l) => `(${l})`,
-  diamond:    (l) => `{${l}}`,
-  stadium:    (l) => `([${l}])`,
-  subroutine: (l) => `[[${l}]]`,
-  circle:     (l) => `((${l}))`,
-  hexagon:    (l) => `{{${l}}}`,
+  rect: l => `[${q(l)}]`,      round: l => `(${q(l)})`,     diamond: l => `{${q(l)}}`,
+  stadium: l => `([${q(l)}])`, subroutine: l => `[[${q(l)}]]`, circle: l => `((${q(l)}))`, hexagon: l => `{{${q(l)}}}`,
 };
+function q(s) {
+  s = s ?? '';
+  const needs = s === '' || /[\[\]{}()|<>"#;:]/.test(s) || /^\s|\s$/.test(s);
+  return needs ? `"${s.replace(/"/g, '#quot;')}"` : s;
+}
 
 function serialize(m) {
+  const incident = new Set();
+  m.edges.forEach(e => { incident.add(e.from); incident.add(e.to); });
   const out = [`flowchart ${m.direction}`];
-  // node declarations (only those with an explicit label)
-  for (const node of m.nodes.values()) {
-    if (node.label !== null) {
-      const wrap = SHAPE_WRAP[node.shape] || SHAPE_WRAP.rect;
-      out.push(`    ${node.id}${wrap(node.label)}`);
+  for (const n of m.nodes.values()) {
+    if (n.label !== null) {
+      const text = n.label === '' ? n.id : n.label;   // never emit empty brackets (invalid in Mermaid)
+      out.push(`    ${n.id}${(SHAPE_WRAP[n.shape] || SHAPE_WRAP.rect)(text)}`);
+    } else if (!incident.has(n.id)) {
+      out.push(`    ${n.id}`); // keep isolated, label-less nodes visible
     }
   }
   for (const e of m.edges) {
-    const mid = e.label ? `${e.connector}|${e.label}|` : e.connector;
+    const mid = e.label ? `${e.connector}|${q(e.label)}|` : e.connector;
     out.push(`    ${e.from} ${mid} ${e.to}`);
   }
   return out.join('\n');
 }
 
-/* ---------------- Rendering ---------------- */
+/* ================= Render ================= */
 async function render(src) {
   const seq = ++renderSeq;
   try {
-    const svg = await renderMermaid('theGraph_' + seq, src);
-    if (seq !== renderSeq) return;               // a newer render won
+    const svg = await renderMermaid('g_' + seq, src);
+    if (seq !== renderSeq) return;
     diagramEl.innerHTML = svg;
-    wireDiagram();
+    decorate();
   } catch (err) {
     if (seq !== renderSeq) return;
     diagramEl.innerHTML = `<div class="error">⚠ 図を描画できません\n${(err && err.message) || err}</div>`;
   }
 }
 
-// Extract original node id from a mermaid <g class="node" id="flowchart-<id>-<n>">
 function svgNodeId(g) {
-  const id = g.id || '';
-  const m = id.match(/^flowchart-(.+)-\d+$/);
+  const m = (g.id || '').match(/^flowchart-(.+)-\d+$/);
   return m ? m[1] : null;
 }
 
-function wireDiagram() {
+// Attach interaction handlers to freshly-rendered SVG and restore selection.
+function decorate() {
   const svg = diagramEl.querySelector('svg');
   if (!svg) return;
-  svg.classList.toggle('picking', mode === 'add');
 
-  // --- nodes (used in add mode) ---
   svg.querySelectorAll('g.node').forEach(g => {
     const id = svgNodeId(g);
     if (id == null) return;
-    g.style.cursor = mode === 'add' ? 'crosshair' : '';
-    g.classList.toggle('pick-source', mode === 'add' && pickSource === id);
-    g.classList.toggle('hoverable', false);
-    g.onclick = null;
-    if (mode === 'add') g.onclick = (ev) => { ev.stopPropagation(); onNodeClick(id); };
+    g.classList.toggle('selected', selected?.kind === 'node' && selected.id === id);
+    g.addEventListener('pointerdown', (e) => onNodePointerDown(e, id));
+    g.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); startEditNode(id); });
+    g.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); selectNode(id); openNodeMenu(e, id); });
   });
 
-  // --- edges (used in delete mode): add transparent thick hit paths ---
-  const edgePaths = svg.querySelectorAll('g.edgePaths > path.flowchart-link, g.edgePaths > path');
-  edgePaths.forEach((path, i) => {
-    if (mode !== 'delete') return;
+  // transparent thick hit paths for edges (click / dblclick / context / select)
+  const paths = svg.querySelectorAll('g.edgePaths > path');
+  paths.forEach((path, i) => {
+    if (selected?.kind === 'edge' && selected.index === i) path.classList.add('edge-selected');
     const hit = path.cloneNode(true);
-    hit.classList.add('hit');
-    hit.setAttribute('fill', 'none');
-    hit.setAttribute('stroke', 'transparent');
-    hit.setAttribute('stroke-width', '14');
+    hit.classList.add('hit'); hit.removeAttribute('marker-end'); hit.removeAttribute('marker-start');
+    hit.setAttribute('fill', 'none'); hit.setAttribute('stroke', 'transparent'); hit.setAttribute('stroke-width', '14');
     hit.style.pointerEvents = 'stroke';
-    hit.addEventListener('mouseenter', () => hit.classList.add('hoverable'));
-    hit.addEventListener('mouseleave', () => hit.classList.remove('hoverable'));
-    hit.addEventListener('click', (ev) => { ev.stopPropagation(); onEdgeClick(i); });
+    hit.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectEdge(i); });
+    hit.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); startEditEdge(i); });
+    hit.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); selectEdge(i); openEdgeMenu(e, i); });
     path.parentNode.appendChild(hit);
   });
+
+  positionNodeTools();
 }
 
-/* ---------------- GUI actions ---------------- */
-function onNodeClick(id) {
-  if (pickSource === null) {
-    pickSource = id;
-    setStatus(`始点: ${id} — 次に終点のノードをクリック`);
-    wireDiagram();
-    return;
+/* ================= Selection ================= */
+function selectNode(id) { selected = { kind: 'node', id }; refreshSelectionUI(); }
+function selectEdge(index) { selected = { kind: 'edge', index }; refreshSelectionUI(); }
+function clearSelection() { selected = null; refreshSelectionUI(); }
+
+function refreshSelectionUI() {
+  const svg = diagramEl.querySelector('svg');
+  if (svg) {
+    svg.querySelectorAll('g.node').forEach(g => g.classList.toggle('selected', selected?.kind === 'node' && svgNodeId(g) === selected.id));
+    svg.querySelectorAll('g.edgePaths > path:not(.hit)').forEach((p, i) => p.classList.toggle('edge-selected', selected?.kind === 'edge' && selected.index === i));
   }
-  if (pickSource === id) {                        // clicking same node cancels
-    pickSource = null;
-    setStatus('始点の選択を解除しました');
-    wireDiagram();
-    return;
-  }
-  model.edges.push({ from: pickSource, to: id, connector: '-->', label: null });
-  const created = `${pickSource} --> ${id}`;
-  pickSource = null;
-  commitModel();
-  setStatus(`矢印を追加: ${created}`);
+  positionNodeTools();
 }
 
-function onEdgeClick(index) {
-  const e = model.edges[index];
-  if (!e) return;
-  model.edges.splice(index, 1);
-  commitModel();
-  setStatus(`矢印を削除: ${e.from} ${e.connector} ${e.to}`);
-}
-
-// Write model back to code (canonical) and re-render.
-function commitModel() {
+/* ================= Mutations (with undo) ================= */
+function snapshot() { return serialize(model); }
+async function commit(mutator) {
+  undoStack.push(snapshot());
+  redoStack.length = 0;
+  mutator();
   const src = serialize(model);
   codeEl.value = src;
-  render(src);
+  await render(src);          // await so callers can touch the freshly rendered DOM
+  syncToolbar();
+}
+function undo() { if (!undoStack.length) return; redoStack.push(snapshot()); loadCode(undoStack.pop()); }
+function redo() { if (!redoStack.length) return; undoStack.push(snapshot()); loadCode(redoStack.pop()); }
+function loadCode(src) { model = parse(src); codeEl.value = src; clearSelection(); render(src); syncToolbar(); }
+
+function newNodeId() {
+  do { idCounter++; } while (model.nodes.has('N' + idCounter));
+  return 'N' + idCounter;
 }
 
-/* ---------------- Wiring ---------------- */
-function setStatus(msg) { statusEl.textContent = msg; }
+function addNode(label) {
+  const id = newNodeId();
+  model.nodes.set(id, { id, label: label ?? '', shape: 'rect' });
+  return id;
+}
+function deleteNode(id) {
+  model.nodes.delete(id);
+  model.edges = model.edges.filter(e => e.from !== id && e.to !== id);
+  if (selected?.kind === 'node' && selected.id === id) selected = null;
+}
+function deleteEdge(index) {
+  model.edges.splice(index, 1);
+  if (selected?.kind === 'edge' && selected.index === index) selected = null;
+}
+function setShape(id, shape) { const n = model.nodes.get(id); if (n) { n.shape = shape; if (n.label === null) n.label = ''; } }
 
+/* ================= Draw-arrow drag ================= */
+let drag = null;   // {fromId, x0, y0, moved, line}
+
+function onNodePointerDown(e, id) {
+  if (e.button !== 0) return;
+  hideMenu();
+  drag = { fromId: id, x0: e.clientX, y0: e.clientY, moved: false, line: null };
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragUp);
+}
+function nodeCenter(id) {
+  const svg = diagramEl.querySelector('svg');
+  const g = [...svg.querySelectorAll('g.node')].find(g => svgNodeId(g) === id);
+  if (!g) return null;
+  const r = g.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+function onDragMove(e) {
+  if (!drag) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+  if (!drag.moved && Math.hypot(dx, dy) > 6) {
+    drag.moved = true;
+    const c = nodeCenter(drag.fromId);
+    drag.line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    drag.line.setAttribute('stroke', 'var(--accent)'); drag.line.setAttribute('stroke-width', '2.5');
+    drag.line.setAttribute('stroke-dasharray', '6 4'); drag.line.setAttribute('marker-end', '');
+    drag.sx = c.x; drag.sy = c.y;
+    overlay.appendChild(drag.line);
+  }
+  if (drag.moved) {
+    drag.line.setAttribute('x1', drag.sx); drag.line.setAttribute('y1', drag.sy);
+    drag.line.setAttribute('x2', e.clientX); drag.line.setAttribute('y2', e.clientY);
+    const t = targetNodeAt(e.clientX, e.clientY);
+    const svg = diagramEl.querySelector('svg');
+    svg?.querySelectorAll('g.node').forEach(g => g.classList.toggle('arrow-target', t && svgNodeId(g) === t && t !== drag.fromId));
+  }
+}
+function targetNodeAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const g = el && el.closest && el.closest('g.node');
+  return g ? svgNodeId(g) : null;
+}
+async function onDragUp(e) {
+  window.removeEventListener('pointermove', onDragMove);
+  window.removeEventListener('pointerup', onDragUp);
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.line) d.line.remove();
+  diagramEl.querySelector('svg')?.querySelectorAll('g.node').forEach(g => g.classList.remove('arrow-target'));
+
+  if (!d.moved) { selectNode(d.fromId); return; }      // no drag → treat as select
+
+  const target = targetNodeAt(e.clientX, e.clientY);
+  const inDiagram = pointInside(e.clientX, e.clientY, diagramEl);
+  if (target && target !== d.fromId) {
+    await commit(() => { model.edges.push({ from: d.fromId, to: target, connector: '-->', label: null }); });
+    selectEdge(model.edges.length - 1);
+  } else if (!target && inDiagram) {
+    // drag to empty → create a connected new node, then edit its label
+    let newId;
+    await commit(() => { newId = addNode(''); model.edges.push({ from: d.fromId, to: newId, connector: '-->', label: null }); });
+    startEditNode(newId, true);
+  }
+}
+function pointInside(x, y, el) { const r = el.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+
+/* ================= Inline label editing ================= */
+let editing = null;  // {kind, id|index, isNew}
+
+function startEditNode(id, isNew = false) {
+  const svg = diagramEl.querySelector('svg');
+  const g = [...svg.querySelectorAll('g.node')].find(g => svgNodeId(g) === id);
+  if (!g) return;
+  selectNode(id);
+  const r = g.getBoundingClientRect();
+  const n = model.nodes.get(id);
+  openEditor(r, n.label ?? '', { kind: 'node', id, isNew });
+}
+function startEditEdge(index) {
+  const svg = diagramEl.querySelector('svg');
+  const path = svg.querySelectorAll('g.edgePaths > path:not(.hit)')[index];
+  const r = path ? path.getBoundingClientRect() : diagramEl.getBoundingClientRect();
+  selectEdge(index);
+  openEditor({ left: r.left + r.width / 2 - 40, top: r.top + r.height / 2 - 14, width: 80, height: 28 },
+             model.edges[index].label ?? '', { kind: 'edge', index });
+}
+function openEditor(rect, value, ctx) {
+  editing = ctx;
+  editEl.style.display = 'block';
+  editEl.style.left = Math.max(4, rect.left) + 'px';
+  editEl.style.top = rect.top + 'px';
+  editEl.style.width = Math.max(60, rect.width) + 'px';
+  editEl.value = value;
+  editEl.focus(); editEl.select();
+}
+function commitEditor() {
+  if (!editing) return;
+  const ctx = editing; editing = null;
+  editEl.style.display = 'none';
+  const val = editEl.value.trim();
+  if (ctx.kind === 'node') {
+    if (ctx.isNew && val === '') { commit(() => deleteNode(ctx.id)); return; }  // empty new node → cancel
+    commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = val; });
+  } else {
+    commit(() => { model.edges[ctx.index].label = val === '' ? null : val; });
+  }
+}
+function cancelEditor() {
+  if (!editing) return;
+  const ctx = editing; editing = null;
+  editEl.style.display = 'none';
+  if (ctx.kind === 'node' && ctx.isNew) commit(() => deleteNode(ctx.id));  // discard half-made node
+}
+editEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); commitEditor(); }
+  else if (e.key === 'Escape') { e.preventDefault(); cancelEditor(); }
+});
+editEl.addEventListener('blur', () => { if (editing) commitEditor(); });
+
+/* ================= Floating node toolbar ================= */
+const SHAPE_BTNS = [
+  { shape: 'rect', glyph: '▭', title: '矩形（処理）' },
+  { shape: 'diamond', glyph: '◇', title: '判断（分岐）' },
+  { shape: 'round', glyph: '▢', title: '角丸' },
+  { shape: 'stadium', glyph: '⬭', title: '開始/終了' },
+];
+function positionNodeTools() {
+  if (selected?.kind !== 'node') { toolsEl.style.display = 'none'; return; }
+  const svg = diagramEl.querySelector('svg');
+  const g = svg && [...svg.querySelectorAll('g.node')].find(x => svgNodeId(x) === selected.id);
+  if (!g) { toolsEl.style.display = 'none'; return; }
+  const n = model.nodes.get(selected.id);
+  toolsEl.innerHTML = '';
+  SHAPE_BTNS.forEach(b => {
+    const btn = document.createElement('button');
+    btn.textContent = b.glyph; btn.title = b.title;
+    btn.className = n && n.shape === b.shape ? 'on' : '';
+    btn.onclick = (e) => { e.stopPropagation(); commit(() => setShape(selected.id, b.shape)); };
+    toolsEl.appendChild(btn);
+  });
+  const sep = document.createElement('div'); sep.className = 'vsep'; toolsEl.appendChild(sep);
+  const del = document.createElement('button'); del.className = 'del'; del.textContent = '🗑'; del.title = '削除 (Delete)';
+  del.onclick = (e) => { e.stopPropagation(); const id = selected.id; commit(() => deleteNode(id)); };
+  toolsEl.appendChild(del);
+
+  const r = g.getBoundingClientRect();
+  const dr = diagramEl.getBoundingClientRect();
+  toolsEl.style.display = 'flex';
+  const tw = toolsEl.offsetWidth || 180;
+  let left = r.left + r.width / 2 - tw / 2;
+  left = Math.min(Math.max(dr.left + 4, left), dr.right - tw - 4);
+  let top = r.top - toolsEl.offsetHeight - 8;
+  if (top < dr.top + 4) top = r.bottom + 8;
+  toolsEl.style.left = left + 'px';
+  toolsEl.style.top = top + 'px';
+}
+
+/* ================= Context menus ================= */
+function openNodeMenu(e, id) {
+  const n = model.nodes.get(id);
+  const html = [];
+  html.push(`<div class="item" data-act="edit">✎ ラベルを編集</div>`);
+  html.push(`<div class="label">形状</div>`);
+  html.push(`<div class="row">` + SHAPE_BTNS.map(b =>
+    `<div class="chip ${n && n.shape === b.shape ? 'on' : ''}" data-shape="${b.shape}" title="${b.title}">${b.glyph}</div>`).join('') + `</div>`);
+  html.push(`<div class="divider"></div>`);
+  html.push(`<div class="item danger" data-act="del">🗑 削除</div>`);
+  showMenu(e, html.join(''), (act, ds) => {
+    if (act === 'edit') startEditNode(id);
+    else if (act === 'del') commit(() => deleteNode(id));
+    else if (ds.shape) commit(() => setShape(id, ds.shape));
+  });
+}
+function openEdgeMenu(e, index) {
+  const html = [
+    `<div class="item" data-act="edit">✎ ラベルを編集</div>`,
+    `<div class="item" data-act="reverse">⇄ 向きを反転</div>`,
+    `<div class="divider"></div>`,
+    `<div class="item danger" data-act="del">🗑 削除</div>`,
+  ].join('');
+  showMenu(e, html, (act) => {
+    if (act === 'edit') startEditEdge(index);
+    else if (act === 'reverse') commit(() => { const ed = model.edges[index]; [ed.from, ed.to] = [ed.to, ed.from]; });
+    else if (act === 'del') commit(() => deleteEdge(index));
+  });
+}
+function openCanvasMenu(e) {
+  showMenu(e, `<div class="item" data-act="add">＋ ノードを追加</div>`, (act) => { if (act === 'add') addNodeInteractive(); });
+}
+function showMenu(e, html, onPick) {
+  ctxEl.innerHTML = html;
+  ctxEl.style.display = 'block';
+  const mw = 200, mh = ctxEl.offsetHeight || 200;
+  ctxEl.style.left = Math.min(e.clientX, window.innerWidth - mw) + 'px';
+  ctxEl.style.top = Math.min(e.clientY, window.innerHeight - mh - 8) + 'px';
+  ctxEl.onclick = (ev) => {
+    const it = ev.target.closest('[data-act],[data-shape]');
+    if (!it) return;
+    hideMenu();
+    onPick(it.dataset.act, it.dataset);
+  };
+}
+function hideMenu() { ctxEl.style.display = 'none'; }
+
+/* ================= Add node (toolbar / canvas) ================= */
+async function addNodeInteractive() {
+  let id;
+  await commit(() => { id = addNode(''); });
+  startEditNode(id, true);
+}
+
+/* ================= Canvas-level events ================= */
+diagramEl.addEventListener('pointerdown', (e) => { if (e.target === diagramEl || e.target.tagName === 'svg') clearSelection(); });
+diagramEl.addEventListener('dblclick', (e) => { if (e.target === diagramEl || e.target.tagName === 'svg') addNodeInteractive(); });
+diagramEl.addEventListener('contextmenu', (e) => {
+  if (e.target === diagramEl || e.target.tagName === 'svg') { e.preventDefault(); openCanvasMenu(e); }
+});
+diagramEl.addEventListener('scroll', () => { hideMenu(); positionNodeTools(); });
+window.addEventListener('pointerdown', (e) => { if (!ctxEl.contains(e.target)) hideMenu(); }, true);
+
+/* ================= Keyboard ================= */
+window.addEventListener('keydown', (e) => {
+  if (editing) return;                         // let the inline editor handle keys
+  const typing = document.activeElement === codeEl;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (typing) return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
+    e.preventDefault();
+    if (selected.kind === 'node') { const id = selected.id; commit(() => deleteNode(id)); }
+    else { const idx = selected.index; commit(() => deleteEdge(idx)); }
+  } else if (e.key === 'Enter' && selected?.kind === 'node') { e.preventDefault(); startEditNode(selected.id); }
+  else if (e.key === 'Escape') { clearSelection(); hideMenu(); }
+});
+
+/* ================= Toolbar wiring ================= */
+document.getElementById('btn-add').onclick = addNodeInteractive;
+document.getElementById('btn-undo').onclick = undo;
+document.getElementById('btn-redo').onclick = redo;
+document.getElementById('btn-copy').onclick = async () => {
+  try { await navigator.clipboard.writeText(codeEl.value); flashHint('コードをコピーしました'); }
+  catch { codeEl.focus(); codeEl.select(); document.execCommand('copy'); flashHint('コードをコピーしました'); }
+};
+dirSel.onchange = () => commit(() => { model.direction = dirSel.value; });
+
+function syncToolbar() {
+  document.getElementById('btn-undo').disabled = undoStack.length === 0;
+  document.getElementById('btn-redo').disabled = redoStack.length === 0;
+  dirSel.value = model.direction;
+}
+let hintTimer;
+function flashHint(msg) {
+  const h = document.getElementById('view-hint');
+  h.textContent = msg; clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => { h.textContent = ''; }, 1800);
+}
+
+/* ================= Code textarea (bidirectional) ================= */
 let debounce;
 codeEl.addEventListener('input', () => {
   clearTimeout(debounce);
   debounce = setTimeout(() => {
     model = parse(codeEl.value);
-    pickSource = null;
+    clearSelection();
     render(codeEl.value);
+    dirSel.value = model.direction;
   }, 200);
 });
+window.addEventListener('resize', positionNodeTools);
 
-toolbar.addEventListener('click', (ev) => {
-  const btn = ev.target.closest('.mode-btn');
-  if (!btn) return;
-  mode = btn.dataset.mode;
-  pickSource = null;
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b === btn));
-  const hints = {
-    select: '図のノードや矢印を操作するとコードに反映されます',
-    add: '始点ノード → 終点ノードの順にクリックで矢印を追加',
-    delete: '削除したい矢印をクリック',
-  };
-  setStatus(hints[mode]);
-  wireDiagram();
-});
-
-// cancel add-selection when clicking empty area
-diagramEl.addEventListener('click', (ev) => {
-  if (mode === 'add' && pickSource && ev.target === diagramEl) {
-    pickSource = null; setStatus('始点の選択を解除しました'); wireDiagram();
-  }
-});
-
-/* ---------------- Boot ---------------- */
+/* ================= Boot ================= */
 const SAMPLE = `flowchart TD
     A[受注] --> B[在庫確認]
     B --> C{在庫あり?}
     C -->|Yes| D[出荷]
     C -->|No| E[発注]
     E --> B
-    D --> F[請求]`;
-
+    D --> F([請求])`;
 codeEl.value = SAMPLE;
 model = parse(SAMPLE);
 render(SAMPLE);
+syncToolbar();
 </script>
 </body>
 </html>
