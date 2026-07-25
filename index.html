@@ -120,6 +120,8 @@
   #node-tools button:hover { background: #f0f2f5; }
   #node-tools button.on { background: var(--accent); color: #fff; }
   #node-tools button.del:hover { background: #fde8e8; color: var(--danger); }
+  #node-tools button.wide { font-size: 12px; font-weight: 600; padding: 4px 8px; color: var(--accent); }
+  #node-tools button.wide:hover { background: var(--accent-soft); }
   #node-tools .vsep { width: 1px; align-self: stretch; background: var(--border); margin: 2px; }
   #node-tools .tip { font-size: 11px; color: var(--muted); padding: 0 6px 0 2px; white-space: nowrap; }
 </style>
@@ -157,6 +159,8 @@
 
   <div class="hintbar">
     <span><b>ドラッグ</b> ノードから矢印を引く（空白へ離すと新ノード生成）</span>
+    <span><b>◇からドラッグ</b> 条件付き分岐を追加（続けて条件を入力）</span>
+    <span><b>矢印を選択→＋工程</b> 間に工程を差し込む</span>
     <span><b>ダブルクリック</b> 文字を編集</span>
     <span><b>右クリック</b> メニュー</span>
     <span><b>Delete</b> 削除</span>
@@ -414,6 +418,17 @@ function deleteEdge(index) {
 function setShape(id, shape) { const n = model.nodes.get(id); if (n) { n.shape = shape; if (n.label === null) n.label = ''; } }
 function setConnector(index, conn) { const ed = model.edges[index]; if (ed) ed.connector = conn; }
 function reverseEdge(index) { const ed = model.edges[index]; if (ed) [ed.from, ed.to] = [ed.to, ed.from]; }
+function isDiamond(id) { const n = model.nodes.get(id); return !!(n && n.shape === 'diamond'); }
+// ① 差し込み: A --> B を A --> X --> B に割る（元の線種・ラベルは前半に残す）
+function splitEdge(index) {
+  const ed = model.edges[index];
+  if (!ed) return null;
+  const midId = addNode('');
+  const tail = { from: midId, to: ed.to, connector: ed.connector, label: null }; // X --> B（素の線）
+  ed.to = midId;                                                                 // A --> X（線種・ラベル維持）
+  model.edges.splice(index + 1, 0, tail);
+  return midId;
+}
 
 /* ================= Draw-arrow drag ================= */
 let drag = null;   // {fromId, x0, y0, moved, line}
@@ -469,14 +484,17 @@ async function onDragUp(e) {
 
   const target = targetNodeAt(e.clientX, e.clientY);
   const inDiagram = pointInside(e.clientX, e.clientY, diagramEl);
+  const fromDiamond = isDiamond(d.fromId);   // ②: dragging out of a 判断◇ means "add a branch"
   if (target && target !== d.fromId) {
-    await commit(() => { model.edges.push({ from: d.fromId, to: target, connector: '-->', label: null }); });
-    selectEdge(model.edges.length - 1);
+    let idx;
+    await commit(() => { model.edges.push({ from: d.fromId, to: target, connector: '-->', label: null }); idx = model.edges.length - 1; });
+    selectEdge(idx);
+    if (fromDiamond) startEditEdge(idx);       // ②: jump straight to naming the condition (Yes/No…)
   } else if (!target && inDiagram) {
     // drag to empty → create a connected new node, then edit its label
-    let newId;
-    await commit(() => { newId = addNode(''); model.edges.push({ from: d.fromId, to: newId, connector: '-->', label: null }); });
-    startEditNode(newId, true);
+    let newId, idx = null;
+    await commit(() => { newId = addNode(''); model.edges.push({ from: d.fromId, to: newId, connector: '-->', label: null }); idx = model.edges.length - 1; });
+    startEditNode(newId, true, fromDiamond ? idx : null);  // ②: chain to condition label when branching from ◇
   }
 }
 function pointInside(x, y, el) { const r = el.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
@@ -484,14 +502,14 @@ function pointInside(x, y, el) { const r = el.getBoundingClientRect(); return x 
 /* ================= Inline label editing ================= */
 let editing = null;  // {kind, id|index, isNew}
 
-function startEditNode(id, isNew = false) {
+function startEditNode(id, isNew = false, chainEdge = null, rejoin = null) {
   const svg = diagramEl.querySelector('svg');
   const g = [...svg.querySelectorAll('g.node')].find(g => svgNodeId(g) === id);
   if (!g) return;
   selectNode(id);
   const r = g.getBoundingClientRect();
   const n = model.nodes.get(id);
-  openEditor(r, n.label ?? '', { kind: 'node', id, isNew });
+  openEditor(r, n.label ?? '', { kind: 'node', id, isNew, chainEdge, rejoin });
 }
 function startEditEdge(index) {
   const svg = diagramEl.querySelector('svg');
@@ -510,23 +528,31 @@ function openEditor(rect, value, ctx) {
   editEl.value = value;
   editEl.focus(); editEl.select();
 }
-function commitEditor() {
+// undo a discarded new node; if it was an ① split, stitch the original A→B back together
+function discardNewNode(ctx) {
+  return commit(() => {
+    deleteNode(ctx.id);
+    if (ctx.rejoin) model.edges.splice(ctx.rejoin.index, 0, { ...ctx.rejoin.edge });
+  });
+}
+async function commitEditor() {
   if (!editing) return;
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
   const val = editEl.value.trim();
   if (ctx.kind === 'node') {
-    if (ctx.isNew && val === '') { commit(() => deleteNode(ctx.id)); return; }  // empty new node → cancel
-    commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = val; });
+    if (ctx.isNew && val === '') { await discardNewNode(ctx); return; }  // empty new node → cancel (restore split)
+    await commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = val; });
+    if (ctx.chainEdge != null && model.edges[ctx.chainEdge]) startEditEdge(ctx.chainEdge);  // ②: name the branch condition
   } else {
-    commit(() => { model.edges[ctx.index].label = val === '' ? null : val; });
+    await commit(() => { model.edges[ctx.index].label = val === '' ? null : val; });
   }
 }
 function cancelEditor() {
   if (!editing) return;
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
-  if (ctx.kind === 'node' && ctx.isNew) commit(() => deleteNode(ctx.id));  // discard half-made node
+  if (ctx.kind === 'node' && ctx.isNew) discardNewNode(ctx);  // discard half-made node (restore split if any)
 }
 editEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); commitEditor(); }
@@ -584,6 +610,7 @@ function positionTools() {
     LINE_BTNS.forEach(b => toolsEl.appendChild(
       mkBtn(b.glyph, b.title, ed && ed.connector === b.conn, '', () => { const i = selected.index; commit(() => setConnector(i, b.conn)); })));
     toolsEl.appendChild(Object.assign(document.createElement('div'), { className: 'vsep' }));
+    toolsEl.appendChild(mkBtn('＋工程', '間に工程を挿入', false, 'wide', () => { const i = selected.index; splitEdgeInteractive(i); }));
     toolsEl.appendChild(mkBtn('⇄', '向きを反転', false, '', () => { const i = selected.index; commit(() => reverseEdge(i)); }));
     toolsEl.appendChild(mkBtn('🗑', '削除 (Delete)', false, 'del', () => { const i = selected.index; commit(() => deleteEdge(i)); }));
     const mid = edgeMidScreen(path);
@@ -620,6 +647,7 @@ function openEdgeMenu(e, index) {
   const ed = model.edges[index];
   const html = [
     `<div class="item" data-act="edit">✎ ラベルを編集</div>`,
+    `<div class="item" data-act="insert">＋ 間に工程を挿入</div>`,
     `<div class="label">線種</div>`,
     `<div class="row">` + LINE_BTNS.map(b =>
       `<div class="chip ${ed && ed.connector === b.conn ? 'on' : ''}" data-conn="${b.conn}" title="${b.title}">${b.glyph}</div>`).join('') + `</div>`,
@@ -629,6 +657,7 @@ function openEdgeMenu(e, index) {
   ].join('');
   showMenu(e, html, (act, ds) => {
     if (act === 'edit') startEditEdge(index);
+    else if (act === 'insert') splitEdgeInteractive(index);
     else if (act === 'reverse') commit(() => reverseEdge(index));
     else if (act === 'del') commit(() => deleteEdge(index));
     else if (ds.conn) commit(() => setConnector(index, ds.conn));
@@ -657,6 +686,16 @@ async function addNodeInteractive() {
   let id;
   await commit(() => { id = addNode(''); });
   startEditNode(id, true);
+}
+
+// ① 差し込みの起動: 割ってから中間ノードのラベル編集へ。空/取消なら元のA→Bに復元。
+async function splitEdgeInteractive(index) {
+  const orig = model.edges[index];
+  if (!orig) return;
+  const rejoin = { index, edge: { from: orig.from, to: orig.to, connector: orig.connector, label: orig.label } };
+  let midId;
+  await commit(() => { midId = splitEdge(index); });
+  if (midId) startEditNode(midId, true, null, rejoin);
 }
 
 /* ================= Canvas-level events ================= */
