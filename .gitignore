@@ -1,0 +1,31 @@
+# --- 認証情報 (絶対にコミットしない) ---
+credentials*.json
+service-account*.json
+service_account*.json
+*-sa.json
+*-serviceaccount.json
+secrets/
+.env
+.env.local
+
+# 念のため: 設定ファイルは除外対象から復帰させる
+!.mcp.json
+!pyproject.toml
+!.env.example
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/

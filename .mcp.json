@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gsc": {
+      "command": "gsc-mcp",
+      "args": [],
+      "env": {
+        "GSC_SERVICE_ACCOUNT_FILE": "/absolute/path/to/service-account.json",
+        "GSC_SITE_URL": "sc-domain:example.com"
+      }
+    }
+  }
+}
