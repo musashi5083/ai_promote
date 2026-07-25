@@ -360,7 +360,7 @@ function decorate() {
     path.parentNode.appendChild(hit);
   });
 
-  positionNodeTools();
+  positionTools();
 }
 
 /* ================= Selection ================= */
@@ -374,7 +374,7 @@ function refreshSelectionUI() {
     svg.querySelectorAll('g.node').forEach(g => g.classList.toggle('selected', selected?.kind === 'node' && svgNodeId(g) === selected.id));
     svg.querySelectorAll('g.edgePaths > path:not(.hit)').forEach((p, i) => p.classList.toggle('edge-selected', selected?.kind === 'edge' && selected.index === i));
   }
-  positionNodeTools();
+  positionTools();
 }
 
 /* ================= Mutations (with undo) ================= */
@@ -412,6 +412,8 @@ function deleteEdge(index) {
   if (selected?.kind === 'edge' && selected.index === index) selected = null;
 }
 function setShape(id, shape) { const n = model.nodes.get(id); if (n) { n.shape = shape; if (n.label === null) n.label = ''; } }
+function setConnector(index, conn) { const ed = model.edges[index]; if (ed) ed.connector = conn; }
+function reverseEdge(index) { const ed = model.edges[index]; if (ed) [ed.from, ed.to] = [ed.to, ed.from]; }
 
 /* ================= Draw-arrow drag ================= */
 let drag = null;   // {fromId, x0, y0, moved, line}
@@ -532,40 +534,68 @@ editEl.addEventListener('keydown', (e) => {
 });
 editEl.addEventListener('blur', () => { if (editing) commitEditor(); });
 
-/* ================= Floating node toolbar ================= */
+/* ================= Floating selection toolbar (node & edge) ================= */
 const SHAPE_BTNS = [
   { shape: 'rect', glyph: '▭', title: '矩形（処理）' },
   { shape: 'diamond', glyph: '◇', title: '判断（分岐）' },
   { shape: 'round', glyph: '▢', title: '角丸' },
   { shape: 'stadium', glyph: '⬭', title: '開始/終了' },
 ];
-function positionNodeTools() {
-  if (selected?.kind !== 'node') { toolsEl.style.display = 'none'; return; }
-  const svg = diagramEl.querySelector('svg');
-  const g = svg && [...svg.querySelectorAll('g.node')].find(x => svgNodeId(x) === selected.id);
-  if (!g) { toolsEl.style.display = 'none'; return; }
-  const n = model.nodes.get(selected.id);
-  toolsEl.innerHTML = '';
-  SHAPE_BTNS.forEach(b => {
-    const btn = document.createElement('button');
-    btn.textContent = b.glyph; btn.title = b.title;
-    btn.className = n && n.shape === b.shape ? 'on' : '';
-    btn.onclick = (e) => { e.stopPropagation(); commit(() => setShape(selected.id, b.shape)); };
-    toolsEl.appendChild(btn);
-  });
-  const sep = document.createElement('div'); sep.className = 'vsep'; toolsEl.appendChild(sep);
-  const del = document.createElement('button'); del.className = 'del'; del.textContent = '🗑'; del.title = '削除 (Delete)';
-  del.onclick = (e) => { e.stopPropagation(); const id = selected.id; commit(() => deleteNode(id)); };
-  toolsEl.appendChild(del);
+const LINE_BTNS = [
+  { conn: '-->',  glyph: '→', title: '実線矢印' },
+  { conn: '-.->', glyph: '⇢', title: '点線矢印' },
+  { conn: '==>',  glyph: '⇛', title: '太線矢印' },
+];
 
-  const r = g.getBoundingClientRect();
+function mkBtn(glyph, title, on, cls, onClick) {
+  const btn = document.createElement('button');
+  btn.textContent = glyph; btn.title = title;
+  btn.className = [on ? 'on' : '', cls || ''].join(' ').trim();
+  btn.onclick = (e) => { e.stopPropagation(); onClick(); };
+  return btn;
+}
+function edgeMidScreen(path) {
+  const local = path.getPointAtLength(path.getTotalLength() / 2);
+  const m = path.getScreenCTM();
+  return { x: local.x * m.a + local.y * m.c + m.e, y: local.x * m.b + local.y * m.d + m.f };
+}
+
+function positionTools() {
+  if (!selected) { toolsEl.style.display = 'none'; return; }
+  const svg = diagramEl.querySelector('svg');
+  if (!svg) { toolsEl.style.display = 'none'; return; }
+  toolsEl.innerHTML = '';
+  let anchor;   // {cx, top, bottom} in viewport coords
+
+  if (selected.kind === 'node') {
+    const g = [...svg.querySelectorAll('g.node')].find(x => svgNodeId(x) === selected.id);
+    if (!g) { toolsEl.style.display = 'none'; return; }
+    const n = model.nodes.get(selected.id);
+    SHAPE_BTNS.forEach(b => toolsEl.appendChild(
+      mkBtn(b.glyph, b.title, n && n.shape === b.shape, '', () => commit(() => setShape(selected.id, b.shape)))));
+    toolsEl.appendChild(Object.assign(document.createElement('div'), { className: 'vsep' }));
+    toolsEl.appendChild(mkBtn('🗑', '削除 (Delete)', false, 'del', () => { const id = selected.id; commit(() => deleteNode(id)); }));
+    const r = g.getBoundingClientRect();
+    anchor = { cx: r.left + r.width / 2, top: r.top, bottom: r.bottom };
+  } else {
+    const path = svg.querySelectorAll('g.edgePaths > path:not(.hit)')[selected.index];
+    if (!path) { toolsEl.style.display = 'none'; return; }
+    const ed = model.edges[selected.index];
+    LINE_BTNS.forEach(b => toolsEl.appendChild(
+      mkBtn(b.glyph, b.title, ed && ed.connector === b.conn, '', () => { const i = selected.index; commit(() => setConnector(i, b.conn)); })));
+    toolsEl.appendChild(Object.assign(document.createElement('div'), { className: 'vsep' }));
+    toolsEl.appendChild(mkBtn('⇄', '向きを反転', false, '', () => { const i = selected.index; commit(() => reverseEdge(i)); }));
+    toolsEl.appendChild(mkBtn('🗑', '削除 (Delete)', false, 'del', () => { const i = selected.index; commit(() => deleteEdge(i)); }));
+    const mid = edgeMidScreen(path);
+    anchor = { cx: mid.x, top: mid.y - 10, bottom: mid.y + 10 };
+  }
+
   const dr = diagramEl.getBoundingClientRect();
   toolsEl.style.display = 'flex';
   const tw = toolsEl.offsetWidth || 180;
-  let left = r.left + r.width / 2 - tw / 2;
-  left = Math.min(Math.max(dr.left + 4, left), dr.right - tw - 4);
-  let top = r.top - toolsEl.offsetHeight - 8;
-  if (top < dr.top + 4) top = r.bottom + 8;
+  let left = Math.min(Math.max(dr.left + 4, anchor.cx - tw / 2), dr.right - tw - 4);
+  let top = anchor.top - toolsEl.offsetHeight - 8;
+  if (top < dr.top + 4) top = anchor.bottom + 8;
   toolsEl.style.left = left + 'px';
   toolsEl.style.top = top + 'px';
 }
@@ -587,16 +617,21 @@ function openNodeMenu(e, id) {
   });
 }
 function openEdgeMenu(e, index) {
+  const ed = model.edges[index];
   const html = [
     `<div class="item" data-act="edit">✎ ラベルを編集</div>`,
+    `<div class="label">線種</div>`,
+    `<div class="row">` + LINE_BTNS.map(b =>
+      `<div class="chip ${ed && ed.connector === b.conn ? 'on' : ''}" data-conn="${b.conn}" title="${b.title}">${b.glyph}</div>`).join('') + `</div>`,
     `<div class="item" data-act="reverse">⇄ 向きを反転</div>`,
     `<div class="divider"></div>`,
     `<div class="item danger" data-act="del">🗑 削除</div>`,
   ].join('');
-  showMenu(e, html, (act) => {
+  showMenu(e, html, (act, ds) => {
     if (act === 'edit') startEditEdge(index);
-    else if (act === 'reverse') commit(() => { const ed = model.edges[index]; [ed.from, ed.to] = [ed.to, ed.from]; });
+    else if (act === 'reverse') commit(() => reverseEdge(index));
     else if (act === 'del') commit(() => deleteEdge(index));
+    else if (ds.conn) commit(() => setConnector(index, ds.conn));
   });
 }
 function openCanvasMenu(e) {
@@ -609,7 +644,7 @@ function showMenu(e, html, onPick) {
   ctxEl.style.left = Math.min(e.clientX, window.innerWidth - mw) + 'px';
   ctxEl.style.top = Math.min(e.clientY, window.innerHeight - mh - 8) + 'px';
   ctxEl.onclick = (ev) => {
-    const it = ev.target.closest('[data-act],[data-shape]');
+    const it = ev.target.closest('[data-act],[data-shape],[data-conn]');
     if (!it) return;
     hideMenu();
     onPick(it.dataset.act, it.dataset);
@@ -630,7 +665,7 @@ diagramEl.addEventListener('dblclick', (e) => { if (e.target === diagramEl || e.
 diagramEl.addEventListener('contextmenu', (e) => {
   if (e.target === diagramEl || e.target.tagName === 'svg') { e.preventDefault(); openCanvasMenu(e); }
 });
-diagramEl.addEventListener('scroll', () => { hideMenu(); positionNodeTools(); });
+diagramEl.addEventListener('scroll', () => { hideMenu(); positionTools(); });
 window.addEventListener('pointerdown', (e) => { if (!ctxEl.contains(e.target)) hideMenu(); }, true);
 
 /* ================= Keyboard ================= */
@@ -681,7 +716,7 @@ codeEl.addEventListener('input', () => {
     dirSel.value = model.direction;
   }, 200);
 });
-window.addEventListener('resize', positionNodeTools);
+window.addEventListener('resize', positionTools);
 
 /* ================= Boot ================= */
 const SAMPLE = `flowchart TD
