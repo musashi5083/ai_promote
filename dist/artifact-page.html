@@ -164,7 +164,8 @@
     <div class="sep"></div>
     <button class="tbtn" id="btn-tidy" title="コードを整形して自動レイアウトし直す">🧹 整理</button>
     <div class="grow"></div>
-    <button class="tbtn" id="btn-save">💾 保存</button>
+    <button class="tbtn" id="btn-save" title="今のファイルに上書き保存 (Ctrl+S)">💾 上書き保存</button>
+    <button class="tbtn" id="btn-saveas" title="名前を付けて保存">📝 名前を付けて保存</button>
     <button class="tbtn" id="btn-load">📂 読み込み</button>
     <button class="tbtn" id="btn-copy">📋 コードをコピー</button>
   </header>
@@ -2419,6 +2420,7 @@ window.addEventListener('pointerdown', (e) => { if (!ctxEl.contains(e.target)) h
 
 /* ================= Keyboard ================= */
 window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }  // Ctrl+S = 上書き保存
   if (editing) return;                         // let the inline editor handle keys
   const typing = document.activeElement === codeEl;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -2453,46 +2455,86 @@ document.getElementById('btn-tidy').onclick = tidy;
 
 // 💾 保存 / 📂 読み込み: the diagram's real content is just the small Mermaid code (.mmd),
 // so we save/load that text — no need to re-save the whole HTML.
-async function saveMmd() {
-  const text = codeEl.value;
-  // Preferred: a real "Save As" dialog so the user picks the folder + name and sees exactly where it goes.
-  if (window.showSaveFilePicker) {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: 'flowchart.mmd',
-        types: [{ description: 'Mermaid diagram', accept: { 'text/plain': ['.mmd'] } }],
-      });
-      const w = await handle.createWritable();
-      await w.write(text); await w.close();
-      flashHint('保存しました: ' + handle.name);
-      return;
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;   // user cancelled the dialog
-      // any other error (e.g. blocked in an iframe) → fall through to download
-    }
+/* ================= Save / Save As / Load (.mmd) =================
+   The File System Access API gives a real Save dialog AND true overwrite, but it
+   only works when the page is opened locally (downloaded HTML) in Chrome/Edge.
+   Inside the claude.ai Artifact iframe, or in Firefox/Safari, it's unavailable —
+   we fall back to a filename prompt + download. We remember the chosen file so
+   「上書き保存」 can write straight back to it without a dialog. */
+let fileHandle = null;   // last opened/saved file (only in File System Access-capable browsers)
+const canFS = !!(window.showSaveFilePicker && window.showOpenFilePicker);
+const FS_TYPES = [{ description: 'Mermaid diagram', accept: { 'text/plain': ['.mmd', '.txt'] } }];
+const fileInput = document.getElementById('file-input');
+
+async function writeToHandle(handle, text) {
+  if (handle.queryPermission) {
+    const opt = { mode: 'readwrite' };
+    let perm = await handle.queryPermission(opt);
+    if (perm !== 'granted') perm = await handle.requestPermission(opt);
+    if (perm !== 'granted') throw new Error('write permission denied');
   }
-  // Fallback: ask for a name, then download to the browser's download folder.
-  let name = prompt('ファイル名を入力（.mmd で保存されます）', 'flowchart');
-  if (name === null) return;                        // cancelled
+  const w = await handle.createWritable();
+  await w.write(text); await w.close();
+}
+function downloadMmd(text) {   // fallback when File System Access is unavailable
+  let name = prompt('ファイル名を入力（.mmd で保存されます）', (fileHandle?.name || 'flowchart').replace(/\.mmd$/i, ''));
+  if (name === null) return false;
   name = (name.trim() || 'flowchart').replace(/\.mmd$/i, '') + '.mmd';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 0);
-  flashHint('ダウンロードフォルダに保存しました: ' + name);
+  flashHint('ダウンロードフォルダに保存しました: ' + name + '（この環境は上書き保存に非対応）');
+  return true;
 }
-document.getElementById('btn-save').onclick = saveMmd;
-const fileInput = document.getElementById('file-input');
-document.getElementById('btn-load').onclick = () => fileInput.click();
+// 名前を付けて保存 — always pick a new file/name
+async function saveAs() {
+  const text = codeEl.value;
+  if (canFS) {
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName: fileHandle?.name || 'flowchart.mmd', types: FS_TYPES });
+      await writeToHandle(handle, text);
+      fileHandle = handle;
+      flashHint('保存しました: ' + handle.name);
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; /* else fall back */ }
+  }
+  downloadMmd(text);
+}
+// 上書き保存 — write back to the current file without a dialog; if none yet, behave like Save As
+async function save() {
+  const text = codeEl.value;
+  if (canFS && fileHandle) {
+    try { await writeToHandle(fileHandle, text); flashHint('上書き保存しました: ' + fileHandle.name); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; /* permission lost → fall back to Save As */ }
+  }
+  return saveAs();
+}
+// 読み込み — remember the handle so 上書き保存 can write straight back to it
+async function loadMmd() {
+  if (canFS) {
+    try {
+      const [handle] = await window.showOpenFilePicker({ types: FS_TYPES });
+      const text = await (await handle.getFile()).text();
+      loadCode(text); fileHandle = handle;
+      flashHint('読み込みました: ' + handle.name);
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; /* else fall back */ }
+  }
+  fileInput.click();
+}
 fileInput.onchange = async () => {
   const f = fileInput.files[0];
   if (!f) return;
-  const text = await f.text();
-  loadCode(text);
-  fileInput.value = '';   // allow re-loading the same file later
+  loadCode(await f.text());
+  fileHandle = null;                 // plain file input can't be written back to
+  fileInput.value = '';
   flashHint('読み込みました: ' + f.name);
 };
+document.getElementById('btn-save').onclick = save;
+document.getElementById('btn-saveas').onclick = saveAs;
+document.getElementById('btn-load').onclick = loadMmd;
 
 // ＋ handle under a selected node: add a new block below, auto-connected with a normal arrow.
 addBelowEl.addEventListener('pointerdown', (e) => e.stopPropagation());
