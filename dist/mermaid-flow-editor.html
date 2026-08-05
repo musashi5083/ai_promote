@@ -1756,17 +1756,30 @@ Licensed under The MIT License (http://opensource.org/licenses/MIT)
 //# sourceMappingURL=mermaid.min.js.map
 
 </script>
+<script>
+/* Grab the mermaid we just bundled the instant it exists — before any host runtime
+   (e.g. the claude.ai Artifact runtime) can load its own copy and clobber window.mermaid. */
+window.__appMermaid = window.mermaid;
+</script>
 <script type="module">
-mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { curve: 'basis' } });
+const MM = window.__appMermaid || window.mermaid;
+MM.initialize({ startOnLoad: false, securityLevel: 'loose', flowchart: { curve: 'basis' } });
 
-function renderMermaid(id, src) {
+function renderOnce(id, src) {
   return new Promise((resolve, reject) => {
     try {
-      const ret = mermaid.render(id, src, (svg) => resolve(svg));
+      const ret = MM.render(id, src, (svg) => resolve(svg));
       if (ret && typeof ret.then === 'function') ret.then(r => resolve(r.svg ?? r)).catch(reject);
       else if (typeof ret === 'string') resolve(ret);
     } catch (e) { reject(e); }
   });
+}
+/* Some hosts leave layout/geometry unsettled on first paint, which makes dagre throw
+   "Cannot read properties of undefined (reading 'x')". Retry once on the next frame. */
+function renderMermaid(id, src) {
+  return renderOnce(id, src).catch(err => new Promise((resolve, reject) => {
+    requestAnimationFrame(() => renderOnce(id + '_r', src).then(resolve, () => reject(err)));
+  }));
 }
 
 /* ================= DOM refs ================= */
