@@ -82,7 +82,8 @@
   .hintbar b { color: var(--text); font-weight: 600; }
 
   /* overlays */
-  #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+  /* full-viewport so the drag-preview line isn't clipped to the SVG's default 300x150 box */
+  #overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
   #inline-edit {
     position: fixed; z-index: 60; display: none;
     border: 2px solid var(--accent); border-radius: 6px; padding: 3px 6px;
