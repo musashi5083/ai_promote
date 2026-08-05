@@ -86,11 +86,21 @@
   #overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
   #inline-edit {
     position: fixed; z-index: 60; display: none;
-    border: 2px solid var(--accent); border-radius: 6px; padding: 3px 6px;
-    font: 500 14px/1.35 system-ui, sans-serif; text-align: center; outline: none;
-    background: #fff; box-shadow: var(--shadow); min-width: 72px;
-    resize: none; overflow: hidden; white-space: pre-wrap; min-height: 26px;
+    border: 2px solid var(--accent); border-radius: 6px; padding: 6px 8px;
+    font: 500 14px/1.4 system-ui, sans-serif; text-align: center; outline: none;
+    background: #fff; box-shadow: var(--shadow); min-width: 220px;
+    resize: none; overflow: hidden; white-space: pre-wrap; min-height: 46px;
   }
+  #edit-tools {
+    position: fixed; z-index: 61; display: none; gap: 4px; align-items: center;
+    background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: var(--shadow); padding: 3px;
+  }
+  #edit-tools button {
+    border: 1px solid transparent; background: none; cursor: pointer;
+    border-radius: 4px; padding: 3px 9px; font-size: 13px; color: var(--text);
+  }
+  #edit-tools button:hover { background: #f0f2f5; }
   #ctx-menu {
     position: fixed; z-index: 70; display: none; min-width: 168px;
     background: #fff; border: 1px solid var(--border); border-radius: 8px;
@@ -179,7 +189,7 @@
     <span><b>ドラッグ</b> ノードから矢印を引く（空白へ離すと新ノード生成）</span>
     <span><b>◇からドラッグ</b> 条件付き分岐を追加（続けて条件を入力）</span>
     <span><b>矢印を選択→＋工程</b> 間に工程を差し込む</span>
-    <span><b>ダブルクリック</b> 文字を編集（<b>Shift+Enter</b>で改行 / <b>Enter</b>で確定）</span>
+    <span><b>ダブルクリック</b> 文字を編集（<b>Shift+Enter</b>改行 / <b>Ctrl+B</b>太字 / <b>Enter</b>確定）</span>
     <span><b>Ctrl+D</b> 複製</span>
     <span><b>右クリック</b> メニュー</span>
     <span><b>Delete</b> 削除</span>
@@ -194,6 +204,7 @@
       </marker>
     </defs>
   </svg>
+  <div id="edit-tools"><button id="bold-btn" title="太字 (Ctrl+B)"><b>B</b> 太字</button></div>
   <textarea id="inline-edit" rows="1" spellcheck="false"></textarea>
   <input id="file-input" type="file" accept=".mmd,.txt,text/plain" style="display:none" />
   <div id="ctx-menu"></div>
@@ -1817,6 +1828,8 @@ const editEl    = document.getElementById('inline-edit');
 const ctxEl     = document.getElementById('ctx-menu');
 const toolsEl   = document.getElementById('node-tools');
 const addBelowEl = document.getElementById('add-below');
+const editToolsEl = document.getElementById('edit-tools');
+const boldBtn   = document.getElementById('bold-btn');
 const dirSel    = document.getElementById('dir');
 
 /* ================= State ================= */
@@ -2167,10 +2180,29 @@ function openEditor(rect, value, ctx) {
   editEl.style.display = 'block';
   editEl.style.left = Math.max(4, rect.left) + 'px';
   editEl.style.top = rect.top + 'px';
-  editEl.style.width = Math.max(72, rect.width) + 'px';
+  editEl.style.width = Math.max(220, rect.width) + 'px';
   editEl.value = brToNl(value);
   autoSizeEditor();
+  // formatting toolbar just above the editor (nodes only — edge labels stay plain)
+  if (ctx.kind === 'node') {
+    editToolsEl.style.display = 'flex';
+    editToolsEl.style.left = Math.max(4, rect.left) + 'px';
+    editToolsEl.style.top = Math.max(4, rect.top - 34) + 'px';
+  } else {
+    editToolsEl.style.display = 'none';
+  }
   editEl.focus(); editEl.select();
+}
+// wrap the current selection (or caret) in <b>…</b>; Mermaid renders it bold.
+function wrapBold() {
+  const t = editEl, s = t.selectionStart, e = t.selectionEnd, v = t.value;
+  const sel = v.slice(s, e);
+  const ins = '<b>' + sel + '</b>';
+  t.value = v.slice(0, s) + ins + v.slice(e);
+  const caret = sel ? s + ins.length : s + 3;   // after </b>, or between the tags
+  t.setSelectionRange(caret, caret);
+  autoSizeEditor();
+  t.focus();
 }
 // undo a discarded new node; if it was an ① split, stitch the original A→B back together
 function discardNewNode(ctx) {
@@ -2183,6 +2215,7 @@ async function commitEditor() {
   if (!editing) return;
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
+  editToolsEl.style.display = 'none';
   const raw = editEl.value.replace(/^\s+|\s+$/g, '');   // trim outer whitespace, keep inner newlines
   const val = nlToBr(raw);                              // newlines -> <br> for Mermaid
   if (ctx.kind === 'node') {
@@ -2198,15 +2231,19 @@ function cancelEditor() {
   if (!editing) return;
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
+  editToolsEl.style.display = 'none';
   if (ctx.kind === 'node' && ctx.isNew) discardNewNode(ctx);  // discard half-made node (restore split if any)
 }
 editEl.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); wrapBold(); return; }  // Ctrl+B = 太字
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditor(); }  // Enter = 確定
   else if (e.key === 'Escape') { e.preventDefault(); cancelEditor(); }
   // Shift+Enter falls through → inserts a newline inside the block
 });
 editEl.addEventListener('input', autoSizeEditor);
 editEl.addEventListener('blur', () => { if (editing) commitEditor(); });
+// mousedown (not click) + preventDefault keeps the textarea focused so blur doesn't commit first
+boldBtn.addEventListener('mousedown', (e) => { e.preventDefault(); wrapBold(); });
 
 /* ================= Floating selection toolbar (node & edge) ================= */
 const SHAPE_BTNS = [
