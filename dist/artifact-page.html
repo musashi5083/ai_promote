@@ -118,6 +118,17 @@
   #node-tools button.wide:hover { background: var(--accent-soft); }
   #node-tools .vsep { width: 1px; align-self: stretch; background: var(--border); margin: 2px; }
   #node-tools .tip { font-size: 11px; color: var(--muted); padding: 0 6px 0 2px; white-space: nowrap; }
+
+  /* round "+" handle shown at the bottom edge of a selected node */
+  #add-below {
+    position: fixed; z-index: 58; display: none;
+    width: 24px; height: 24px; align-items: center; justify-content: center;
+    border-radius: 50%; border: 2px solid #fff; cursor: pointer; padding: 0;
+    background: var(--accent); color: #fff; font-size: 16px; line-height: 1;
+    box-shadow: 0 2px 7px rgba(37,99,235,.55);
+    transition: transform .08s ease, filter .08s ease;
+  }
+  #add-below:hover { filter: brightness(1.08); transform: scale(1.12); }
 </style>
 
   <header>
@@ -135,6 +146,8 @@
         <option value="RL">右→左 (RL)</option>
       </select>
     </label>
+    <div class="sep"></div>
+    <button class="tbtn" id="btn-tidy" title="コードを整形して自動レイアウトし直す">🧹 整理</button>
     <div class="grow"></div>
     <button class="tbtn" id="btn-copy">📋 コードをコピー</button>
   </header>
@@ -151,6 +164,7 @@
   </main>
 
   <div class="hintbar">
+    <span><b>ブロック選択→＋</b> 下に次の工程を追加（矢印で自動接続）</span>
     <span><b>ドラッグ</b> ノードから矢印を引く（空白へ離すと新ノード生成）</span>
     <span><b>◇からドラッグ</b> 条件付き分岐を追加（続けて条件を入力）</span>
     <span><b>矢印を選択→＋工程</b> 間に工程を差し込む</span>
@@ -161,10 +175,18 @@
   </div>
 
   <!-- overlays -->
-  <svg id="overlay"></svg>
+  <svg id="overlay">
+    <defs>
+      <marker id="drag-arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5"
+              orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"></path>
+      </marker>
+    </defs>
+  </svg>
   <input id="inline-edit" />
   <div id="ctx-menu"></div>
   <div id="node-tools"></div>
+  <button id="add-below" title="下に工程を追加">＋</button>
 
 <script>
 (function(tA,g0){typeof exports=="object"&&typeof module<"u"?module.exports=g0():typeof define=="function"&&define.amd?define(g0):(tA=typeof globalThis<"u"?globalThis:tA||self,tA.mermaid=g0())})(this,function(){"use strict";function tA(s){for(var o=[],f=1;f<arguments.length;f++)o[f-1]=arguments[f];var p=Array.from(typeof s=="string"?[s]:s);p[p.length-1]=p[p.length-1].replace(/\r?\n([\t ]*)$/,"");var w=p.reduce(function(_,A){var N=A.match(/\n([\t ]+|(?!\s).)/g);return N?_.concat(N.map(function(B){var F,H;return(H=(F=B.match(/[\t ]/g))===null||F===void 0?void 0:F.length)!==null&&H!==void 0?H:0})):_},[]);if(w.length){var k=new RegExp(`
@@ -1782,6 +1804,7 @@ const overlay   = document.getElementById('overlay');
 const editEl    = document.getElementById('inline-edit');
 const ctxEl     = document.getElementById('ctx-menu');
 const toolsEl   = document.getElementById('node-tools');
+const addBelowEl = document.getElementById('add-below');
 const dirSel    = document.getElementById('dir');
 
 /* ================= State ================= */
@@ -2052,8 +2075,12 @@ function onDragMove(e) {
     drag.moved = true;
     const c = nodeCenter(drag.fromId);
     drag.line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    drag.line.setAttribute('stroke', 'var(--accent)'); drag.line.setAttribute('stroke-width', '2.5');
-    drag.line.setAttribute('stroke-dasharray', '6 4'); drag.line.setAttribute('marker-end', '');
+    // Note: var(--accent) must go through .style — SVG presentation attributes don't resolve var().
+    drag.line.style.stroke = 'var(--accent)';
+    drag.line.style.strokeWidth = '2.5';
+    drag.line.style.strokeDasharray = '6 4';
+    drag.line.style.opacity = '0.95';
+    drag.line.setAttribute('marker-end', 'url(#drag-arrowhead)');
     drag.sx = c.x; drag.sy = c.y;
     overlay.appendChild(drag.line);
   }
@@ -2187,6 +2214,7 @@ function edgeMidScreen(path) {
 }
 
 function positionTools() {
+  addBelowEl.style.display = 'none';   // shown only for a selected node (below)
   if (!selected) { toolsEl.style.display = 'none'; return; }
   const svg = diagramEl.querySelector('svg');
   if (!svg) { toolsEl.style.display = 'none'; return; }
@@ -2205,6 +2233,10 @@ function positionTools() {
     toolsEl.appendChild(mkBtn('🗑', '削除 (Delete)', false, 'del', () => { const id = selected.id; commit(() => deleteNode(id)); }));
     const r = g.getBoundingClientRect();
     anchor = { cx: r.left + r.width / 2, top: r.top, bottom: r.bottom };
+    const sz = 24;
+    addBelowEl.style.display = 'flex';
+    addBelowEl.style.left = (r.left + r.width / 2 - sz / 2) + 'px';
+    addBelowEl.style.top  = (r.bottom - sz / 2 + 4) + 'px';
   } else {
     const path = svg.querySelectorAll('g.edgePaths > path:not(.hit)')[selected.index];
     if (!path) { toolsEl.style.display = 'none'; return; }
@@ -2343,6 +2375,25 @@ document.getElementById('btn-copy').onclick = async () => {
   catch { codeEl.focus(); codeEl.select(); document.execCommand('copy'); flashHint('コードをコピーしました'); }
 };
 dirSel.onchange = () => commit(() => { model.direction = dirSel.value; });
+
+// 🧹 整理: re-serialize (clean up the code) and recompute the auto-layout from scratch.
+async function tidy() {
+  const src = serialize(parse(serialize(model)));
+  loadCode(src);
+  flashHint('整理しました');
+}
+document.getElementById('btn-tidy').onclick = tidy;
+
+// ＋ handle under a selected node: add a new block below, auto-connected with a normal arrow.
+addBelowEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+addBelowEl.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (selected?.kind !== 'node') return;
+  const from = selected.id;
+  let nid;
+  await commit(() => { nid = addNode(''); model.edges.push({ from, to: nid, connector: '-->', label: null }); });
+  startEditNode(nid, true);   // jump straight into naming the new block
+});
 
 function syncToolbar() {
   document.getElementById('btn-undo').disabled = undoStack.length === 0;
