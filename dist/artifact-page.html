@@ -80,12 +80,12 @@
   #overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40; }
   #inline-edit {
     position: fixed; z-index: 60; display: none;
-    border: 2px solid var(--accent); border-radius: 6px; padding: 6px 8px;
-    font: 500 14px/1.4 system-ui, sans-serif; text-align: center; outline: none;
-    background: #fff; box-shadow: var(--shadow); min-width: 220px; max-width: 520px;
-    white-space: pre-wrap; overflow-wrap: anywhere; min-height: 46px; cursor: text;
+    border: 2px solid var(--accent); border-radius: 8px; padding: 8px 10px;
+    font: 500 14px/1.5 system-ui, sans-serif; text-align: left; outline: none;
+    background: #fff; box-shadow: var(--shadow);
+    min-width: 300px; min-height: 110px; width: 360px; height: 150px;
+    resize: both; overflow: auto; white-space: pre-wrap;
   }
-  #inline-edit b, #inline-edit strong { font-weight: 700; }
   #edit-tools {
     position: fixed; z-index: 61; display: none; gap: 4px; align-items: center;
     background: #fff; border: 1px solid var(--border); border-radius: 6px;
@@ -204,7 +204,7 @@
     <button id="bold-btn" title="太字 (Ctrl+B)"><b>B</b> 太字 <span class="sc">Ctrl+B</span></button>
     <button id="break-btn" title="改行 (Shift+Enter)">↵ 改行 <span class="sc">Shift+Enter</span></button>
   </div>
-  <div id="inline-edit" contenteditable="true" spellcheck="false"></div>
+  <textarea id="inline-edit" spellcheck="false"></textarea>
   <input id="file-input" type="file" accept=".mmd,.txt,text/plain" style="display:none" />
   <div id="ctx-menu"></div>
   <div id="node-tools"></div>
@@ -2170,73 +2170,46 @@ function startEditEdge(index) {
   openEditor({ left: r.left + r.width / 2 - 40, top: r.top + r.height / 2 - 14, width: 80, height: 28 },
              model.edges[index].label ?? '', { kind: 'edge', index });
 }
-// ---- WYSIWYG block editor (contenteditable) ----
-// The editor shows real bold / line breaks. On commit we serialise its DOM back to
-// a Mermaid label using only <b>…</b> and <br>, so the code panel stays clean.
-function selectAllEditor() {
-  const range = document.createRange();
-  range.selectNodeContents(editEl);
-  const sel = window.getSelection();
-  sel.removeAllRanges(); sel.addRange(range);
-}
-function labelFromEditor() {
-  const walk = (node) => {
-    let out = '';
-    node.childNodes.forEach((n) => {
-      if (n.nodeType === 3) { out += n.nodeValue.replace(/​/g, '').replace(/\r?\n/g, '<br>'); return; }  // drop caret markers; stray newline -> <br>
-      if (n.nodeType !== 1) return;
-      const tag = n.tagName;
-      if (tag === 'BR') out += '<br>';
-      else if (tag === 'B' || tag === 'STRONG') out += '<b>' + walk(n) + '</b>';
-      else if (tag === 'DIV' || tag === 'P') { if (out !== '') out += '<br>'; out += walk(n); }
-      else out += walk(n);   // unwrap spans/others, keep inner text & formatting
-    });
-    return out;
-  };
-  return walk(editEl).replace(/^(?:<br>)+/, '').replace(/(?:<br>)+$/, '').trim();
-}
+// ---- Plain-textarea block editor (reliable with Japanese IME) ----
+// The label stores <br> for line breaks; the textarea uses real newlines.
+function brToNl(s) { return (s ?? '').replace(/<br\s*\/?>/gi, '\n'); }
+function nlToBr(s) { return s.replace(/\r?\n/g, '<br>'); }
 
 function openEditor(rect, value, ctx) {
   editing = ctx;
   editEl.style.display = 'block';
-  editEl.style.left = Math.max(4, rect.left) + 'px';
-  editEl.style.top = rect.top + 'px';
-  editEl.style.width = Math.max(220, rect.width) + 'px';
-  editEl.innerHTML = value || '';        // value holds <b>/<br> → shown WYSIWYG
-  addBelowEl.style.display = 'none';     // avoid overlap with the toolbar-below while editing
+  // a big comfortable window, clamped to stay on screen
+  const W = editEl.offsetWidth || 360, H = editEl.offsetHeight || 150;
+  editEl.style.left = Math.min(Math.max(4, rect.left), window.innerWidth - W - 8) + 'px';
+  editEl.style.top  = Math.min(Math.max(4, rect.top),  window.innerHeight - H - 44) + 'px';
+  editEl.value = brToNl(value);
+  addBelowEl.style.display = 'none';     // avoid overlap while editing
   toolsEl.style.display = 'none';        // hide the block toolbar so it never collides with the edit toolbar
   // formatting toolbar BELOW the editor (nodes only) so it never collides with the block's toolbar above
   if (ctx.kind === 'node') {
-    editToolsEl.style.display = 'flex';
     const eb = editEl.getBoundingClientRect();
-    editToolsEl.style.left = Math.max(4, rect.left) + 'px';
+    editToolsEl.style.display = 'flex';
+    editToolsEl.style.left = eb.left + 'px';
     editToolsEl.style.top = (eb.bottom + 6) + 'px';
   } else {
     editToolsEl.style.display = 'none';
   }
-  editEl.focus(); selectAllEditor();
+  editEl.focus(); editEl.select();
 }
+// wrap the current selection (or caret) in <b>…</b>; Mermaid renders it bold.
 function insertBold() {
-  editEl.focus();
-  document.execCommand('styleWithCSS', false, false);   // prefer <b> over inline style
-  document.execCommand('bold');
+  const t = editEl, s = t.selectionStart, e = t.selectionEnd, v = t.value;
+  const sel = v.slice(s, e);
+  const ins = '<b>' + sel + '</b>';
+  t.value = v.slice(0, s) + ins + v.slice(e);
+  const caret = sel ? s + ins.length : s + 3;   // after </b>, or between the tags
+  t.setSelectionRange(caret, caret); t.focus();
 }
+// insert a newline at the caret (the 改行 button)
 function insertBreak() {
-  editEl.focus();
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  range.deleteContents();
-  const br = document.createElement('br');
-  range.insertNode(br);
-  // A zero-width marker after the <br> gives the caret a spot on the new line so typed
-  // text lands AFTER the break (otherwise it slips in front and the trailing <br> is dropped).
-  const marker = document.createTextNode('​');
-  if (br.nextSibling) br.parentNode.insertBefore(marker, br.nextSibling);
-  else br.parentNode.appendChild(marker);
-  const r2 = document.createRange();
-  r2.setStart(marker, 1); r2.collapse(true);
-  sel.removeAllRanges(); sel.addRange(r2);
+  const t = editEl, s = t.selectionStart, e = t.selectionEnd, v = t.value;
+  t.value = v.slice(0, s) + '\n' + v.slice(e);
+  t.setSelectionRange(s + 1, s + 1); t.focus();
 }
 // undo a discarded new node; if it was an ① split, stitch the original A→B back together
 function discardNewNode(ctx) {
@@ -2250,7 +2223,7 @@ async function commitEditor() {
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
   editToolsEl.style.display = 'none';
-  const val = labelFromEditor();   // DOM -> label with only <b>/<br>
+  const val = nlToBr(editEl.value.replace(/^\s+|\s+$/g, ''));   // trim outer space, newlines -> <br>
   if (ctx.kind === 'node') {
     // click-away / Enter keeps the block; blank new blocks get a placeholder instead of vanishing (MS-like). Only Esc discards.
     const label = (val === '' && ctx.isNew) ? NEW_LABEL : val;
@@ -2269,6 +2242,8 @@ function cancelEditor() {
   else positionTools();                                       // bring the block toolbar back
 }
 editEl.addEventListener('keydown', (e) => {
+  // While the IME is composing (Japanese conversion), let Enter confirm the conversion — never commit/break here.
+  if (e.isComposing || e.keyCode === 229) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); insertBold(); return; }  // Ctrl+B = 太字
   if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertBreak(); return; }   // Shift+Enter = 改行
   if (e.key === 'Enter') { e.preventDefault(); commitEditor(); return; }                // Enter = 確定
@@ -2478,15 +2453,36 @@ document.getElementById('btn-tidy').onclick = tidy;
 
 // 💾 保存 / 📂 読み込み: the diagram's real content is just the small Mermaid code (.mmd),
 // so we save/load that text — no need to re-save the whole HTML.
-document.getElementById('btn-save').onclick = () => {
-  const blob = new Blob([codeEl.value], { type: 'text/plain;charset=utf-8' });
+async function saveMmd() {
+  const text = codeEl.value;
+  // Preferred: a real "Save As" dialog so the user picks the folder + name and sees exactly where it goes.
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: 'flowchart.mmd',
+        types: [{ description: 'Mermaid diagram', accept: { 'text/plain': ['.mmd'] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(text); await w.close();
+      flashHint('保存しました: ' + handle.name);
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;   // user cancelled the dialog
+      // any other error (e.g. blocked in an iframe) → fall through to download
+    }
+  }
+  // Fallback: ask for a name, then download to the browser's download folder.
+  let name = prompt('ファイル名を入力（.mmd で保存されます）', 'flowchart');
+  if (name === null) return;                        // cancelled
+  name = (name.trim() || 'flowchart').replace(/\.mmd$/i, '') + '.mmd';
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'flowchart.mmd';
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 0);
-  flashHint('コードを保存しました (.mmd)');
-};
+  flashHint('ダウンロードフォルダに保存しました: ' + name);
+}
+document.getElementById('btn-save').onclick = saveMmd;
 const fileInput = document.getElementById('file-input');
 document.getElementById('btn-load').onclick = () => fileInput.click();
 fileInput.onchange = async () => {
