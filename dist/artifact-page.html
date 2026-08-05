@@ -82,9 +82,10 @@
     position: fixed; z-index: 60; display: none;
     border: 2px solid var(--accent); border-radius: 6px; padding: 6px 8px;
     font: 500 14px/1.4 system-ui, sans-serif; text-align: center; outline: none;
-    background: #fff; box-shadow: var(--shadow); min-width: 220px;
-    resize: none; overflow: hidden; white-space: pre-wrap; min-height: 46px;
+    background: #fff; box-shadow: var(--shadow); min-width: 220px; max-width: 520px;
+    white-space: pre-wrap; overflow-wrap: anywhere; min-height: 46px; cursor: text;
   }
+  #inline-edit b, #inline-edit strong { font-weight: 700; }
   #edit-tools {
     position: fixed; z-index: 61; display: none; gap: 4px; align-items: center;
     background: #fff; border: 1px solid var(--border); border-radius: 6px;
@@ -93,8 +94,10 @@
   #edit-tools button {
     border: 1px solid transparent; background: none; cursor: pointer;
     border-radius: 4px; padding: 3px 9px; font-size: 13px; color: var(--text);
+    display: inline-flex; align-items: center; gap: 4px;
   }
   #edit-tools button:hover { background: #f0f2f5; }
+  #edit-tools button .sc { color: var(--muted); font-size: 11px; }
   #ctx-menu {
     position: fixed; z-index: 70; display: none; min-width: 168px;
     background: #fff; border: 1px solid var(--border); border-radius: 8px;
@@ -197,8 +200,11 @@
       </marker>
     </defs>
   </svg>
-  <div id="edit-tools"><button id="bold-btn" title="太字 (Ctrl+B)"><b>B</b> 太字</button></div>
-  <textarea id="inline-edit" rows="1" spellcheck="false"></textarea>
+  <div id="edit-tools">
+    <button id="bold-btn" title="太字 (Ctrl+B)"><b>B</b> 太字 <span class="sc">Ctrl+B</span></button>
+    <button id="break-btn" title="改行 (Shift+Enter)">↵ 改行 <span class="sc">Shift+Enter</span></button>
+  </div>
+  <div id="inline-edit" contenteditable="true" spellcheck="false"></div>
   <input id="file-input" type="file" accept=".mmd,.txt,text/plain" style="display:none" />
   <div id="ctx-menu"></div>
   <div id="node-tools"></div>
@@ -1823,6 +1829,7 @@ const toolsEl   = document.getElementById('node-tools');
 const addBelowEl = document.getElementById('add-below');
 const editToolsEl = document.getElementById('edit-tools');
 const boldBtn   = document.getElementById('bold-btn');
+const breakBtn  = document.getElementById('break-btn');
 const dirSel    = document.getElementById('dir');
 
 /* ================= State ================= */
@@ -1923,7 +1930,7 @@ const SHAPE_WRAP = {
   stadium: l => `([${q(l)}])`, subroutine: l => `[[${q(l)}]]`, circle: l => `((${q(l)}))`, hexagon: l => `{{${q(l)}}}`,
 };
 function q(s) {
-  s = s ?? '';
+  s = (s ?? '').replace(/\r?\n/g, '<br>');   // a label must never contain a raw newline (it would split the code line)
   const needs = s === '' || /[\[\]{}()|<>"#;:]/.test(s) || /^\s|\s$/.test(s);
   return needs ? `"${s.replace(/"/g, '#quot;')}"` : s;
 }
@@ -2163,10 +2170,31 @@ function startEditEdge(index) {
   openEditor({ left: r.left + r.width / 2 - 40, top: r.top + r.height / 2 - 14, width: 80, height: 28 },
              model.edges[index].label ?? '', { kind: 'edge', index });
 }
-// Mermaid stores line breaks as <br>; the textarea uses real newlines.
-function brToNl(s) { return (s ?? '').replace(/<br\s*\/?>/gi, '\n'); }
-function nlToBr(s) { return s.replace(/\r?\n/g, '<br>'); }
-function autoSizeEditor() { editEl.style.height = 'auto'; editEl.style.height = editEl.scrollHeight + 'px'; }
+// ---- WYSIWYG block editor (contenteditable) ----
+// The editor shows real bold / line breaks. On commit we serialise its DOM back to
+// a Mermaid label using only <b>…</b> and <br>, so the code panel stays clean.
+function selectAllEditor() {
+  const range = document.createRange();
+  range.selectNodeContents(editEl);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+}
+function labelFromEditor() {
+  const walk = (node) => {
+    let out = '';
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { out += n.nodeValue.replace(/​/g, '').replace(/\r?\n/g, '<br>'); return; }  // drop caret markers; stray newline -> <br>
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName;
+      if (tag === 'BR') out += '<br>';
+      else if (tag === 'B' || tag === 'STRONG') out += '<b>' + walk(n) + '</b>';
+      else if (tag === 'DIV' || tag === 'P') { if (out !== '') out += '<br>'; out += walk(n); }
+      else out += walk(n);   // unwrap spans/others, keep inner text & formatting
+    });
+    return out;
+  };
+  return walk(editEl).replace(/^(?:<br>)+/, '').replace(/(?:<br>)+$/, '').trim();
+}
 
 function openEditor(rect, value, ctx) {
   editing = ctx;
@@ -2174,28 +2202,41 @@ function openEditor(rect, value, ctx) {
   editEl.style.left = Math.max(4, rect.left) + 'px';
   editEl.style.top = rect.top + 'px';
   editEl.style.width = Math.max(220, rect.width) + 'px';
-  editEl.value = brToNl(value);
-  autoSizeEditor();
-  // formatting toolbar just above the editor (nodes only — edge labels stay plain)
+  editEl.innerHTML = value || '';        // value holds <b>/<br> → shown WYSIWYG
+  addBelowEl.style.display = 'none';     // avoid overlap with the toolbar-below while editing
+  toolsEl.style.display = 'none';        // hide the block toolbar so it never collides with the edit toolbar
+  // formatting toolbar BELOW the editor (nodes only) so it never collides with the block's toolbar above
   if (ctx.kind === 'node') {
     editToolsEl.style.display = 'flex';
+    const eb = editEl.getBoundingClientRect();
     editToolsEl.style.left = Math.max(4, rect.left) + 'px';
-    editToolsEl.style.top = Math.max(4, rect.top - 34) + 'px';
+    editToolsEl.style.top = (eb.bottom + 6) + 'px';
   } else {
     editToolsEl.style.display = 'none';
   }
-  editEl.focus(); editEl.select();
+  editEl.focus(); selectAllEditor();
 }
-// wrap the current selection (or caret) in <b>…</b>; Mermaid renders it bold.
-function wrapBold() {
-  const t = editEl, s = t.selectionStart, e = t.selectionEnd, v = t.value;
-  const sel = v.slice(s, e);
-  const ins = '<b>' + sel + '</b>';
-  t.value = v.slice(0, s) + ins + v.slice(e);
-  const caret = sel ? s + ins.length : s + 3;   // after </b>, or between the tags
-  t.setSelectionRange(caret, caret);
-  autoSizeEditor();
-  t.focus();
+function insertBold() {
+  editEl.focus();
+  document.execCommand('styleWithCSS', false, false);   // prefer <b> over inline style
+  document.execCommand('bold');
+}
+function insertBreak() {
+  editEl.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const br = document.createElement('br');
+  range.insertNode(br);
+  // A zero-width marker after the <br> gives the caret a spot on the new line so typed
+  // text lands AFTER the break (otherwise it slips in front and the trailing <br> is dropped).
+  const marker = document.createTextNode('​');
+  if (br.nextSibling) br.parentNode.insertBefore(marker, br.nextSibling);
+  else br.parentNode.appendChild(marker);
+  const r2 = document.createRange();
+  r2.setStart(marker, 1); r2.collapse(true);
+  sel.removeAllRanges(); sel.addRange(r2);
 }
 // undo a discarded new node; if it was an ① split, stitch the original A→B back together
 function discardNewNode(ctx) {
@@ -2209,15 +2250,14 @@ async function commitEditor() {
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
   editToolsEl.style.display = 'none';
-  const raw = editEl.value.replace(/^\s+|\s+$/g, '');   // trim outer whitespace, keep inner newlines
-  const val = nlToBr(raw);                              // newlines -> <br> for Mermaid
+  const val = labelFromEditor();   // DOM -> label with only <b>/<br>
   if (ctx.kind === 'node') {
     // click-away / Enter keeps the block; blank new blocks get a placeholder instead of vanishing (MS-like). Only Esc discards.
-    const label = (raw === '' && ctx.isNew) ? NEW_LABEL : val;
+    const label = (val === '' && ctx.isNew) ? NEW_LABEL : val;
     await commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = label; });
     if (ctx.chainEdge != null && model.edges[ctx.chainEdge]) startEditEdge(ctx.chainEdge);  // ②: name the branch condition
   } else {
-    await commit(() => { model.edges[ctx.index].label = raw === '' ? null : val; });
+    await commit(() => { model.edges[ctx.index].label = val === '' ? null : val; });
   }
 }
 function cancelEditor() {
@@ -2226,17 +2266,18 @@ function cancelEditor() {
   editEl.style.display = 'none';
   editToolsEl.style.display = 'none';
   if (ctx.kind === 'node' && ctx.isNew) discardNewNode(ctx);  // discard half-made node (restore split if any)
+  else positionTools();                                       // bring the block toolbar back
 }
 editEl.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); wrapBold(); return; }  // Ctrl+B = 太字
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditor(); }  // Enter = 確定
-  else if (e.key === 'Escape') { e.preventDefault(); cancelEditor(); }
-  // Shift+Enter falls through → inserts a newline inside the block
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); insertBold(); return; }  // Ctrl+B = 太字
+  if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertBreak(); return; }   // Shift+Enter = 改行
+  if (e.key === 'Enter') { e.preventDefault(); commitEditor(); return; }                // Enter = 確定
+  if (e.key === 'Escape') { e.preventDefault(); cancelEditor(); return; }
 });
-editEl.addEventListener('input', autoSizeEditor);
 editEl.addEventListener('blur', () => { if (editing) commitEditor(); });
-// mousedown (not click) + preventDefault keeps the textarea focused so blur doesn't commit first
-boldBtn.addEventListener('mousedown', (e) => { e.preventDefault(); wrapBold(); });
+// mousedown (not click) + preventDefault keeps focus/selection so blur doesn't commit first
+boldBtn.addEventListener('mousedown', (e) => { e.preventDefault(); insertBold(); });
+breakBtn.addEventListener('mousedown', (e) => { e.preventDefault(); insertBreak(); });
 
 /* ================= Floating selection toolbar (node & edge) ================= */
 const SHAPE_BTNS = [
