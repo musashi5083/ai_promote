@@ -81,8 +81,9 @@
   #inline-edit {
     position: fixed; z-index: 60; display: none;
     border: 2px solid var(--accent); border-radius: 6px; padding: 3px 6px;
-    font: 500 14px/1.3 system-ui, sans-serif; text-align: center; outline: none;
-    background: #fff; box-shadow: var(--shadow); min-width: 60px;
+    font: 500 14px/1.35 system-ui, sans-serif; text-align: center; outline: none;
+    background: #fff; box-shadow: var(--shadow); min-width: 72px;
+    resize: none; overflow: hidden; white-space: pre-wrap; min-height: 26px;
   }
   #ctx-menu {
     position: fixed; z-index: 70; display: none; min-width: 168px;
@@ -150,6 +151,8 @@
     <div class="sep"></div>
     <button class="tbtn" id="btn-tidy" title="コードを整形して自動レイアウトし直す">🧹 整理</button>
     <div class="grow"></div>
+    <button class="tbtn" id="btn-save">💾 保存</button>
+    <button class="tbtn" id="btn-load">📂 読み込み</button>
     <button class="tbtn" id="btn-copy">📋 コードをコピー</button>
   </header>
 
@@ -169,7 +172,7 @@
     <span><b>ドラッグ</b> ノードから矢印を引く（空白へ離すと新ノード生成）</span>
     <span><b>◇からドラッグ</b> 条件付き分岐を追加（続けて条件を入力）</span>
     <span><b>矢印を選択→＋工程</b> 間に工程を差し込む</span>
-    <span><b>ダブルクリック</b> 文字を編集</span>
+    <span><b>ダブルクリック</b> 文字を編集（<b>Shift+Enter</b>で改行 / <b>Enter</b>で確定）</span>
     <span><b>Ctrl+D</b> 複製</span>
     <span><b>右クリック</b> メニュー</span>
     <span><b>Delete</b> 削除</span>
@@ -184,7 +187,8 @@
       </marker>
     </defs>
   </svg>
-  <input id="inline-edit" />
+  <textarea id="inline-edit" rows="1" spellcheck="false"></textarea>
+  <input id="file-input" type="file" accept=".mmd,.txt,text/plain" style="display:none" />
   <div id="ctx-menu"></div>
   <div id="node-tools"></div>
   <button id="add-below" title="下に工程を追加">＋</button>
@@ -2146,13 +2150,19 @@ function startEditEdge(index) {
   openEditor({ left: r.left + r.width / 2 - 40, top: r.top + r.height / 2 - 14, width: 80, height: 28 },
              model.edges[index].label ?? '', { kind: 'edge', index });
 }
+// Mermaid stores line breaks as <br>; the textarea uses real newlines.
+function brToNl(s) { return (s ?? '').replace(/<br\s*\/?>/gi, '\n'); }
+function nlToBr(s) { return s.replace(/\r?\n/g, '<br>'); }
+function autoSizeEditor() { editEl.style.height = 'auto'; editEl.style.height = editEl.scrollHeight + 'px'; }
+
 function openEditor(rect, value, ctx) {
   editing = ctx;
   editEl.style.display = 'block';
   editEl.style.left = Math.max(4, rect.left) + 'px';
   editEl.style.top = rect.top + 'px';
-  editEl.style.width = Math.max(60, rect.width) + 'px';
-  editEl.value = value;
+  editEl.style.width = Math.max(72, rect.width) + 'px';
+  editEl.value = brToNl(value);
+  autoSizeEditor();
   editEl.focus(); editEl.select();
 }
 // undo a discarded new node; if it was an ① split, stitch the original A→B back together
@@ -2166,14 +2176,15 @@ async function commitEditor() {
   if (!editing) return;
   const ctx = editing; editing = null;
   editEl.style.display = 'none';
-  const val = editEl.value.trim();
+  const raw = editEl.value.replace(/^\s+|\s+$/g, '');   // trim outer whitespace, keep inner newlines
+  const val = nlToBr(raw);                              // newlines -> <br> for Mermaid
   if (ctx.kind === 'node') {
     // click-away / Enter keeps the block; blank new blocks get a placeholder instead of vanishing (MS-like). Only Esc discards.
-    const label = (val === '' && ctx.isNew) ? NEW_LABEL : val;
+    const label = (raw === '' && ctx.isNew) ? NEW_LABEL : val;
     await commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = label; });
     if (ctx.chainEdge != null && model.edges[ctx.chainEdge]) startEditEdge(ctx.chainEdge);  // ②: name the branch condition
   } else {
-    await commit(() => { model.edges[ctx.index].label = val === '' ? null : val; });
+    await commit(() => { model.edges[ctx.index].label = raw === '' ? null : val; });
   }
 }
 function cancelEditor() {
@@ -2183,9 +2194,11 @@ function cancelEditor() {
   if (ctx.kind === 'node' && ctx.isNew) discardNewNode(ctx);  // discard half-made node (restore split if any)
 }
 editEl.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); commitEditor(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditor(); }  // Enter = 確定
   else if (e.key === 'Escape') { e.preventDefault(); cancelEditor(); }
+  // Shift+Enter falls through → inserts a newline inside the block
 });
+editEl.addEventListener('input', autoSizeEditor);
 editEl.addEventListener('blur', () => { if (editing) commitEditor(); });
 
 /* ================= Floating selection toolbar (node & edge) ================= */
@@ -2384,6 +2397,28 @@ async function tidy() {
   flashHint('整理しました');
 }
 document.getElementById('btn-tidy').onclick = tidy;
+
+// 💾 保存 / 📂 読み込み: the diagram's real content is just the small Mermaid code (.mmd),
+// so we save/load that text — no need to re-save the whole HTML.
+document.getElementById('btn-save').onclick = () => {
+  const blob = new Blob([codeEl.value], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flowchart.mmd';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+  flashHint('コードを保存しました (.mmd)');
+};
+const fileInput = document.getElementById('file-input');
+document.getElementById('btn-load').onclick = () => fileInput.click();
+fileInput.onchange = async () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  const text = await f.text();
+  loadCode(text);
+  fileInput.value = '';   // allow re-loading the same file later
+  flashHint('読み込みました: ' + f.name);
+};
 
 // ＋ handle under a selected node: add a new block below, auto-connected with a normal arrow.
 addBelowEl.addEventListener('pointerdown', (e) => e.stopPropagation());
