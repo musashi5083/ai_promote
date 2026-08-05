@@ -162,6 +162,7 @@
     <span><b>◇からドラッグ</b> 条件付き分岐を追加（続けて条件を入力）</span>
     <span><b>矢印を選択→＋工程</b> 間に工程を差し込む</span>
     <span><b>ダブルクリック</b> 文字を編集</span>
+    <span><b>Ctrl+D</b> 複製</span>
     <span><b>右クリック</b> メニュー</span>
     <span><b>Delete</b> 削除</span>
   </div>
@@ -356,7 +357,7 @@ function decorate() {
     if (selected?.kind === 'edge' && selected.index === i) path.classList.add('edge-selected');
     const hit = path.cloneNode(true);
     hit.classList.add('hit'); hit.removeAttribute('marker-end'); hit.removeAttribute('marker-start');
-    hit.setAttribute('fill', 'none'); hit.setAttribute('stroke', 'transparent'); hit.setAttribute('stroke-width', '14');
+    hit.setAttribute('fill', 'none'); hit.setAttribute('stroke', 'transparent'); hit.setAttribute('stroke-width', '26');
     hit.style.pointerEvents = 'stroke';
     hit.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectEdge(i); });
     hit.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); startEditEdge(i); });
@@ -419,6 +420,15 @@ function setShape(id, shape) { const n = model.nodes.get(id); if (n) { n.shape =
 function setConnector(index, conn) { const ed = model.edges[index]; if (ed) ed.connector = conn; }
 function reverseEdge(index) { const ed = model.edges[index]; if (ed) [ed.from, ed.to] = [ed.to, ed.from]; }
 function isDiamond(id) { const n = model.nodes.get(id); return !!(n && n.shape === 'diamond'); }
+// クリックで複製: 同じラベル・形状の独立ノードを1つ作る（矢印は引き継がない・軽量）
+function duplicateNode(id) {
+  const n = model.nodes.get(id);
+  if (!n) return null;
+  const nid = newNodeId();
+  const label = (n.label ?? '') === '' ? NEW_LABEL : n.label;
+  model.nodes.set(nid, { id: nid, label, shape: n.shape });
+  return nid;
+}
 // ① 差し込み: A --> B を A --> X --> B に割る（元の線種・ラベルは前半に残す）
 function splitEdge(index) {
   const ed = model.edges[index];
@@ -501,6 +511,7 @@ function pointInside(x, y, el) { const r = el.getBoundingClientRect(); return x 
 
 /* ================= Inline label editing ================= */
 let editing = null;  // {kind, id|index, isNew}
+const NEW_LABEL = '新しい工程';   // placeholder kept when a new block is left blank (so it never vanishes on click-away)
 
 function startEditNode(id, isNew = false, chainEdge = null, rejoin = null) {
   const svg = diagramEl.querySelector('svg');
@@ -541,8 +552,9 @@ async function commitEditor() {
   editEl.style.display = 'none';
   const val = editEl.value.trim();
   if (ctx.kind === 'node') {
-    if (ctx.isNew && val === '') { await discardNewNode(ctx); return; }  // empty new node → cancel (restore split)
-    await commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = val; });
+    // click-away / Enter keeps the block; blank new blocks get a placeholder instead of vanishing (MS-like). Only Esc discards.
+    const label = (val === '' && ctx.isNew) ? NEW_LABEL : val;
+    await commit(() => { const n = model.nodes.get(ctx.id); if (n) n.label = label; });
     if (ctx.chainEdge != null && model.edges[ctx.chainEdge]) startEditEdge(ctx.chainEdge);  // ②: name the branch condition
   } else {
     await commit(() => { model.edges[ctx.index].label = val === '' ? null : val; });
@@ -597,9 +609,11 @@ function positionTools() {
     const g = [...svg.querySelectorAll('g.node')].find(x => svgNodeId(x) === selected.id);
     if (!g) { toolsEl.style.display = 'none'; return; }
     const n = model.nodes.get(selected.id);
+    toolsEl.appendChild(mkBtn('✎', '文字を編集 (Enter/ダブルクリック)', false, '', () => startEditNode(selected.id)));
     SHAPE_BTNS.forEach(b => toolsEl.appendChild(
       mkBtn(b.glyph, b.title, n && n.shape === b.shape, '', () => commit(() => setShape(selected.id, b.shape)))));
     toolsEl.appendChild(Object.assign(document.createElement('div'), { className: 'vsep' }));
+    toolsEl.appendChild(mkBtn('⧉', '複製 (Ctrl+D)', false, '', () => { const id = selected.id; duplicateNodeInteractive(id); }));
     toolsEl.appendChild(mkBtn('🗑', '削除 (Delete)', false, 'del', () => { const id = selected.id; commit(() => deleteNode(id)); }));
     const r = g.getBoundingClientRect();
     anchor = { cx: r.left + r.width / 2, top: r.top, bottom: r.bottom };
@@ -607,6 +621,7 @@ function positionTools() {
     const path = svg.querySelectorAll('g.edgePaths > path:not(.hit)')[selected.index];
     if (!path) { toolsEl.style.display = 'none'; return; }
     const ed = model.edges[selected.index];
+    toolsEl.appendChild(mkBtn('✎', '矢印の文字を編集 (ダブルクリック)', false, '', () => { const i = selected.index; startEditEdge(i); }));
     LINE_BTNS.forEach(b => toolsEl.appendChild(
       mkBtn(b.glyph, b.title, ed && ed.connector === b.conn, '', () => { const i = selected.index; commit(() => setConnector(i, b.conn)); })));
     toolsEl.appendChild(Object.assign(document.createElement('div'), { className: 'vsep' }));
@@ -632,6 +647,7 @@ function openNodeMenu(e, id) {
   const n = model.nodes.get(id);
   const html = [];
   html.push(`<div class="item" data-act="edit">✎ ラベルを編集</div>`);
+  html.push(`<div class="item" data-act="dup">⧉ 複製</div>`);
   html.push(`<div class="label">形状</div>`);
   html.push(`<div class="row">` + SHAPE_BTNS.map(b =>
     `<div class="chip ${n && n.shape === b.shape ? 'on' : ''}" data-shape="${b.shape}" title="${b.title}">${b.glyph}</div>`).join('') + `</div>`);
@@ -639,6 +655,7 @@ function openNodeMenu(e, id) {
   html.push(`<div class="item danger" data-act="del">🗑 削除</div>`);
   showMenu(e, html.join(''), (act, ds) => {
     if (act === 'edit') startEditNode(id);
+    else if (act === 'dup') duplicateNodeInteractive(id);
     else if (act === 'del') commit(() => deleteNode(id));
     else if (ds.shape) commit(() => setShape(id, ds.shape));
   });
@@ -688,6 +705,12 @@ async function addNodeInteractive() {
   startEditNode(id, true);
 }
 
+async function duplicateNodeInteractive(id) {
+  let nid;
+  await commit(() => { nid = duplicateNode(id); });
+  if (nid) selectNode(nid);
+}
+
 // ① 差し込みの起動: 割ってから中間ノードのラベル編集へ。空/取消なら元のA→Bに復元。
 async function splitEdgeInteractive(index) {
   const orig = model.edges[index];
@@ -714,6 +737,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (typing) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (selected?.kind === 'node') duplicateNodeInteractive(selected.id); return; }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
     e.preventDefault();
     if (selected.kind === 'node') { const id = selected.id; commit(() => deleteNode(id)); }
