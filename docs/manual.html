@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mermaid フロー エディタ ― はじめての方向けマニュアル</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --panel:#ffffff; --border:#d9dde3; --accent:#2563eb;
+    --accent-soft:#dbeafe; --text:#1f2937; --muted:#6b7280; --danger:#dc2626;
+    --ok:#16a34a; --warn:#b45309; --warn-bg:#fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0f1216; --panel:#171b21; --border:#2b313a; --accent:#6ea8fe;
+      --accent-soft:#1e293b; --text:#e5e7eb; --muted:#9aa4b2; --danger:#f87171;
+      --ok:#4ade80; --warn:#fbbf24; --warn-bg:#3a2f13;
+    }
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body {
+    font-family: system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.75; padding:0 16px 80px;
+  }
+  .wrap { max-width:860px; margin:0 auto; }
+  header.hero {
+    padding:34px 0 22px; border-bottom:2px solid var(--border); margin-bottom:8px;
+  }
+  header.hero h1 { font-size:26px; margin:0 0 6px; }
+  header.hero p { margin:0; color:var(--muted); }
+  h2 {
+    font-size:20px; margin:38px 0 12px; padding-top:10px;
+    border-top:1px solid var(--border);
+  }
+  h2 .n {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff;
+    font-size:15px; margin-right:10px; vertical-align:2px;
+  }
+  h3 { font-size:16px; margin:22px 0 6px; }
+  p, li { font-size:15px; }
+  ul,ol { padding-left:22px; }
+  li { margin:4px 0; }
+  code, kbd {
+    font-family: ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:.9em;
+  }
+  kbd {
+    background:var(--panel); border:1px solid var(--border); border-bottom-width:2px;
+    border-radius:5px; padding:1px 6px; white-space:nowrap; color:var(--text);
+  }
+  code.inline { background:var(--accent-soft); border-radius:4px; padding:1px 5px; }
+  .card {
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:16px 20px; margin:14px 0;
+  }
+  .steps { counter-reset:step; list-style:none; padding-left:0; }
+  .steps > li {
+    counter-increment:step; position:relative; padding:6px 0 6px 40px; margin:0;
+  }
+  .steps > li::before {
+    content:counter(step); position:absolute; left:0; top:6px;
+    width:26px; height:26px; border-radius:50%; background:var(--accent-soft);
+    color:var(--accent); font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;
+  }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:14px; }
+  th,td { border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--accent-soft); color:var(--text); white-space:nowrap; }
+  .callout { border-left:4px solid var(--accent); background:var(--panel); border-radius:0 10px 10px 0; padding:12px 16px; margin:14px 0; }
+  .callout.warn { border-left-color:var(--warn); background:var(--warn-bg); }
+  .callout.ok   { border-left-color:var(--ok); }
+  .callout .lead { font-weight:700; display:block; margin-bottom:2px; }
+  .tag { display:inline-block; background:var(--accent); color:#fff; border-radius:6px; padding:1px 8px; font-size:13px; font-weight:600; }
+  .muted { color:var(--muted); }
+  .toc { columns:2; gap:24px; }
+  .toc a { color:var(--accent); text-decoration:none; }
+  .toc a:hover { text-decoration:underline; }
+  @media (max-width:640px){ .toc{columns:1;} }
+  hr { border:0; border-top:1px solid var(--border); margin:30px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>🗺️ Mermaid フロー エディタ ― はじめての方向けマニュアル</h1>
+    <p>マウスでブロックと矢印を並べるだけで、業務フロー図が作れるツールです。インストール不要・ブラウザだけで動きます。</p>
+  </header>
+
+  <div class="card">
+    <strong>このマニュアルの前提</strong>
+    <ul style="margin:6px 0 0">
+      <li>ツール本体（<code>mermaid-flow-editor.html</code>）を <b>SharePoint からダウンロード</b>して使います。</li>
+      <li>ダウンロードした HTML を <b>ブラウザで開いて</b>使います（インストール不要）。</li>
+      <li>作った図は <code>.mmd</code> ファイルとして <b>ローカル（Box Drive などの同期フォルダ）に保存</b>します。</li>
+    </ul>
+  </div>
+
+  <div class="toc card">
+    <strong>目次</strong>
+    <ol style="margin:8px 0 0">
+      <li><a href="#s1">準備：ダウンロードして開く</a></li>
+      <li><a href="#s2">画面の見方</a></li>
+      <li><a href="#s3">基本操作（ブロックと矢印）</a></li>
+      <li><a href="#s4">文字を書く・太字・改行</a></li>
+      <li><a href="#s5">保存と読み込み（重要）</a></li>
+      <li><a href="#s6">ショートカット一覧</a></li>
+      <li><a href="#s7">困ったとき（Q&amp;A）</a></li>
+    </ol>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="s1"><span class="n">1</span>準備：ダウンロードして開く</h2>
+  <ol class="steps">
+    <li>SharePoint の共有場所を開き、<code>mermaid-flow-editor.html</code> を探します。</li>
+    <li>そのファイルを <b>自分のPCにダウンロード</b>します。保存先は、ふだん使う <b>Box Drive の同期フォルダ</b>や<b>デスクトップ</b>が分かりやすいです。</li>
+    <li>ダウンロードした <code>mermaid-flow-editor.html</code> を <b>ダブルクリック</b>して開きます。<br>
+        （うまく開かない時は、ファイルを <b>Chrome か Edge のウィンドウにドラッグ＆ドロップ</b>してください）</li>
+  </ol>
+  <div class="callout ok">
+    <span class="lead">✅ ブラウザは Chrome か Edge を推奨</span>
+    保存ダイアログや「上書き保存」がきちんと使えます。Firefox / Safari でも図は作れますが、保存は「ダウンロード」動作になります（後述）。
+  </div>
+  <div class="callout">
+    <span class="lead">ℹ️ インターネットに接続していなくても動きます</span>
+    このツールは1枚のHTMLで完結しており、外部との通信は一切しません。安心して社内でお使いいただけます。
+  </div>
+
+  <!-- 2 -->
+  <h2 id="s2"><span class="n">2</span>画面の見方</h2>
+  <p>画面は左右に分かれています。</p>
+  <table>
+    <tr><th>左：Mermaid コード</th><td>図の「設計図」にあたるテキストです。<b>基本は触らなくてOK</b>。図を編集すると自動で書き換わります。分かる人は直接編集も可能です。</td></tr>
+    <tr><th>右：プレビュー</th><td>実際のフロー図。<b>ここをマウスで操作</b>してブロックや矢印を作ります。</td></tr>
+  </table>
+  <p>上部のツールバーに、<span class="tag">＋ ノード</span> <span class="tag">↶ ↷（元に戻す/やり直し）</span> <span class="tag">向き</span> <span class="tag">🧹 整理</span> <span class="tag">💾 上書き保存</span> <span class="tag">📝 名前を付けて保存</span> <span class="tag">📂 読み込み</span> <span class="tag">📋 コードをコピー</span> があります。</p>
+
+  <!-- 3 -->
+  <h2 id="s3"><span class="n">3</span>基本操作（ブロックと矢印）</h2>
+
+  <h3>ブロックを追加する</h3>
+  <ul>
+    <li><b>ブロックの下の「＋」</b>：ブロックを1回クリックすると下に <b>＋</b> が出ます。押すと<b>下に次の工程が矢印付きで追加</b>され、そのまま名前を入力できます。（いちばん手軽）</li>
+    <li><b>何もない所をダブルクリック</b>：単独のブロックを追加します。</li>
+    <li><b>ツールバーの「＋ ノード」</b>：ブロックを1つ追加します。</li>
+  </ul>
+
+  <h3>矢印でつなぐ</h3>
+  <ul>
+    <li>ブロックの上で <b>マウスを押したまま、つなぎたい相手のブロックまでドラッグ</b>して離すと、矢印が引けます。ドラッグ中は<b>青い点線の矢印</b>が伸びて向きが分かります。</li>
+    <li>ブロックから <b>何もない所へドラッグ</b>して離すと、<b>新しいブロックを矢印付きで</b>作れます。続けて名前を入力できます。</li>
+  </ul>
+
+  <h3>分岐（条件で枝分かれ）</h3>
+  <ul>
+    <li>ブロックを選び、形を <b>◇（判断）</b>に変えます（下記「形を変える」参照）。</li>
+    <li><b>◇からドラッグ</b>して矢印を引くと分岐になり、続けて <b>条件（例：はい / いいえ）</b>を入力できます。</li>
+  </ul>
+
+  <h3>間に工程を差し込む</h3>
+  <ul>
+    <li>矢印を1回クリックして選び、出てくるメニューの <b>＋工程</b> を押すと、その矢印の<b>途中に新しいブロック</b>が入ります。</li>
+  </ul>
+
+  <h3>形を変える・複製・削除</h3>
+  <ul>
+    <li><b>ブロックを選ぶ</b>と小さなメニューが出ます：<b>▭ 四角</b> / <b>◇ 判断</b> / <b>▢ 角丸</b> / <b>⬭ 開始終了</b> に形を変更、<b>⧉ 複製</b>、<b>🗑 削除</b>。</li>
+    <li><b>矢印を選ぶ</b>と：線の種類（<b>→ 実線</b> / <b>⇢ 点線</b> / <b>⇛ 太線</b>）、<b>⇄ 向き反転</b>、<b>🗑 削除</b>。</li>
+    <li><b>右クリック</b>でもメニューが出ます。</li>
+  </ul>
+
+  <h3>全体の向き・整理</h3>
+  <ul>
+    <li>ツールバーの <b>「向き」</b>で、上→下(TD)・左→右(LR)などに切り替えられます。</li>
+    <li><b>🧹 整理</b>を押すと、配置を計算し直してきれいに並べ直します。</li>
+  </ul>
+
+  <!-- 4 -->
+  <h2 id="s4"><span class="n">4</span>文字を書く・太字・改行</h2>
+  <ol class="steps">
+    <li>ブロックを <b>ダブルクリック</b>すると、<b>大きな入力窓</b>が開きます。</li>
+    <li>文字を入力します。日本語入力（IME）もそのまま使えます。</li>
+    <li>途中で改行したいときは <kbd>Shift</kbd>+<kbd>Enter</kbd>、または入力窓の下の <b>↵ 改行</b> ボタン。</li>
+    <li>強調したい所は、文字を選んで <kbd>Ctrl</kbd>+<kbd>B</kbd>、または <b>B 太字</b> ボタン。</li>
+    <li>書き終えたら <kbd>Enter</kbd> で確定（<kbd>Esc</kbd> で取り消し）。</li>
+  </ol>
+  <p class="muted">※ 太字は編集中は <code class="inline">&lt;b&gt;…&lt;/b&gt;</code> というタグの形で見えますが、確定するとブロック内で太字になります。</p>
+
+  <!-- 5 -->
+  <h2 id="s5"><span class="n">5</span>保存と読み込み（重要）</h2>
+  <p>作った図は <code>.mmd</code> という小さなテキストファイルで保存します。<b>これが図の本体</b>です（ツールのHTMLは「道具」で、図そのものではありません）。</p>
+
+  <h3>はじめて保存するとき</h3>
+  <ol class="steps">
+    <li>ツールバーの <b>📝 名前を付けて保存</b> を押します。</li>
+    <li>保存ダイアログで <b>Box Drive の同期フォルダ</b>（例：<code>Box\チーム名\フロー図\</code>）を選びます。</li>
+    <li>分かりやすい名前を付けて保存します（例：<code>受注業務フロー.mmd</code>）。</li>
+  </ol>
+  <div class="callout ok">
+    <span class="lead">✅ Box を使っている場合</span>
+    <b>Box Drive の同期フォルダに保存すれば、自動でクラウドに上がり、チームにも共有されます。</b>PC上のふつうのフォルダと同じ感覚で保存すればOKです。
+  </div>
+
+  <h3>2回目以降（上書き保存）</h3>
+  <ul>
+    <li><kbd>Ctrl</kbd>+<kbd>S</kbd>、または <b>💾 上書き保存</b> で、<b>今のファイルにダイアログなしで上書き</b>されます。</li>
+  </ul>
+
+  <h3>前に作った図を開く</h3>
+  <ul>
+    <li><b>📂 読み込み</b> を押して <code>.mmd</code> ファイルを選びます。開いたファイルは記憶されるので、以後 <kbd>Ctrl</kbd>+<kbd>S</kbd> で同じファイルに上書きできます。</li>
+  </ul>
+
+  <div class="callout warn">
+    <span class="lead">⚠️ 保存ダイアログが出ない場合</span>
+    お使いのブラウザや会社の設定によっては、ダイアログが出ず <b>「ダウンロードフォルダ」に保存（ダウンロード）</b>されることがあります。その場合は、ダウンロードされた <code>.mmd</code> を <b>Box Drive のフォルダに移動</b>してください。<br>
+    ダイアログと「上書き保存」をきちんと使うには <b>Chrome または Edge で、ダウンロードしたHTMLを開く</b>のが確実です。
+  </div>
+
+  <h3>他の人に見せたいとき</h3>
+  <ul>
+    <li><b>📋 コードをコピー</b>で Mermaid コードをコピーし、Mermaid対応のメモ（社内Wiki等）に貼ると図として表示できます。</li>
+    <li>または <code>.mmd</code> ファイルそのものを共有し、相手はこのツールの <b>📂 読み込み</b>で開けます。</li>
+  </ul>
+
+  <!-- 6 -->
+  <h2 id="s6"><span class="n">6</span>ショートカット一覧</h2>
+  <table>
+    <tr><th>操作</th><th>ショートカット</th></tr>
+    <tr><td>上書き保存</td><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td></tr>
+    <tr><td>元に戻す / やり直し</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td></tr>
+    <tr><td>ブロックを複製</td><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td></tr>
+    <tr><td>選択中のブロック/矢印を削除</td><td><kbd>Delete</kbd></td></tr>
+    <tr><td>文字を編集（選択中のブロック）</td><td><kbd>Enter</kbd> または ダブルクリック</td></tr>
+    <tr><td>入力中に改行</td><td><kbd>Shift</kbd>+<kbd>Enter</kbd></td></tr>
+    <tr><td>入力中に太字</td><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td></tr>
+    <tr><td>入力を確定 / 取り消し</td><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td></tr>
+  </table>
+
+  <!-- 7 -->
+  <h2 id="s7"><span class="n">7</span>困ったとき（Q&amp;A）</h2>
+
+  <h3>Q. ダブルクリックしても図が出ない／うまく開かない</h3>
+  <p>A. ファイルを <b>Chrome か Edge のウィンドウにドラッグ＆ドロップ</b>してみてください。ブラウザの「規定のアプリ」設定によっては別ソフトで開こうとすることがあります。</p>
+
+  <h3>Q. 「名前を付けて保存」でダイアログが出ない</h3>
+  <p>A. ブラウザや社内設定の都合で、<b>ダウンロード動作</b>になっている状態です。ダウンロードされた <code>.mmd</code> を Box フォルダへ移動すればOK。ダイアログを使いたい場合は <b>Chrome/Edge でローカルのHTMLを開いて</b>ください。</p>
+
+  <h3>Q. 入力中に文字がおかしくなる</h3>
+  <p>A. 最新版では日本語入力（変換確定のEnter）に対応済みです。もし古いファイルを使っている場合は、SharePoint から <b>最新の <code>mermaid-flow-editor.html</code> を再ダウンロード</b>してください。</p>
+
+  <h3>Q.「⚠ 図を描画できません」と出た</h3>
+  <p>A. 左のコードを直接編集したときに、記法が崩れると出ます。<b>元に戻す（<kbd>Ctrl</kbd>+<kbd>Z</kbd>）</b>で戻すか、直前の編集を見直してください。マウス操作だけで作っていれば基本的に出ません。</p>
+
+  <h3>Q. 保存した図はどこにある？</h3>
+  <p>A. 保存時に選んだフォルダ（推奨：Box Drive の同期フォルダ）です。ダイアログが出ない環境では <b>PCの「ダウンロード」フォルダ</b>に入ります。</p>
+
+  <h3>Q. Mermaid コードって何？触っても大丈夫？</h3>
+  <p>A. 図を表す短いテキストです。<b>基本は触らなくて大丈夫</b>。分かる人は直接編集でき、内容はすぐ右の図に反映されます。</p>
+
+  <hr>
+  <p class="muted" style="text-align:center">わからないことがあれば、共有元の担当者までお気軽に。 🗺️</p>
+
+</div>
+</body>
+</html>
