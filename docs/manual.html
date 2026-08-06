@@ -77,6 +77,19 @@
   .toc a:hover { text-decoration:underline; }
   @media (max-width:640px){ .toc{columns:1;} }
   hr { border:0; border-top:1px solid var(--border); margin:30px 0; }
+
+  /* PDF / print: force light, keep colored blocks, avoid ugly page breaks */
+  @media print {
+    :root { color-scheme:light; }
+    body { background:#fff; color:#111; padding:0; font-size:12pt; }
+    .wrap { max-width:none; }
+    a { color:#1d4ed8; text-decoration:none; }
+    h2 { break-before:auto; }
+    h2, h3 { break-after:avoid; }
+    .card, .callout, table, .toc, .steps > li { break-inside:avoid; }
+    tr, li { break-inside:avoid; }
+    header.hero { padding-top:0; }
+  }
 </style>
 </head>
 <body>
