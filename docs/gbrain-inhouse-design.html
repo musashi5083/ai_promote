@@ -1,0 +1,852 @@
+<title>GBrain 社内移植設計</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #eceef2;
+    --surface:     #fbfcfd;
+    --surface-2:   #e3e7ee;
+    --ink:         #14171e;
+    --ink-soft:    #4e5666;
+    --ink-faint:   #79808f;
+    --rule:        #ccd2dc;
+    --rule-soft:   #dde1e8;
+    --accent:      #8a6a1f;
+    --accent-deep: #6b511433;
+    --risk:        #9c3f33;
+    --risk-wash:   #9c3f3314;
+    --ok:          #2f6b52;
+    --ok-wash:     #2f6b5214;
+
+    --font-display: "Zen Old Mincho", "Yu Mincho", "Hiragino Mincho ProN", Georgia, serif;
+    --font-body:    "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --measure: 40rem;
+    --wide: 62rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #12151b;
+      --surface:     #1a1e26;
+      --surface-2:   #232833;
+      --ink:         #e4e7ee;
+      --ink-soft:    #98a1b2;
+      --ink-faint:   #6f7889;
+      --rule:        #2f3641;
+      --rule-soft:   #262c36;
+      --accent:      #d8ad4e;
+      --accent-deep: #d8ad4e2b;
+      --risk:        #e0806f;
+      --risk-wash:   #e0806f1a;
+      --ok:          #6fbf99;
+      --ok-wash:     #6fbf991a;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #12151b;
+    --surface:     #1a1e26;
+    --surface-2:   #232833;
+    --ink:         #e4e7ee;
+    --ink-soft:    #98a1b2;
+    --ink-faint:   #6f7889;
+    --rule:        #2f3641;
+    --rule-soft:   #262c36;
+    --accent:      #d8ad4e;
+    --accent-deep: #d8ad4e2b;
+    --risk:        #e0806f;
+    --risk-wash:   #e0806f1a;
+    --ok:          #6fbf99;
+    --ok-wash:     #6fbf991a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.85;
+    font-feature-settings: "palt" 1;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+  }
+
+  .page { max-width: var(--wide); margin: 0 auto; }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    padding: 4.5rem 0 2.5rem;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .masthead h1 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .standfirst {
+    max-width: var(--measure);
+    color: var(--ink-soft);
+    font-size: 1.02rem;
+    margin: 0;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.03em;
+  }
+  .meta b { color: var(--ink-soft); font-weight: 600; }
+
+  /* ---------- sections ---------- */
+
+  section { padding-top: 3.75rem; }
+
+  .sec-head {
+    display: grid;
+    grid-template-columns: 3.25rem 1fr;
+    align-items: baseline;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+    margin-bottom: 1.75rem;
+  }
+  .sec-num {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
+  .sec-head h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.4rem, 3vw, 1.9rem);
+    line-height: 1.4;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.14rem;
+    line-height: 1.55;
+    margin: 2.5rem 0 0.5rem;
+    text-wrap: balance;
+  }
+  h3 .h3-num {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--accent);
+    margin-right: 0.6rem;
+    font-weight: 600;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 1.05rem; }
+  p.lead { color: var(--ink-soft); }
+
+  ul, ol { max-width: var(--measure); margin: 0 0 1.15rem; padding-left: 1.2rem; }
+  li { margin-bottom: 0.4rem; }
+  li::marker { color: var(--ink-faint); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  strong { font-weight: 700; }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--surface-2);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  .pull {
+    max-width: var(--measure);
+    border-left: 3px solid var(--accent);
+    padding: 0.35rem 0 0.35rem 1.15rem;
+    margin: 1.6rem 0;
+    font-family: var(--font-display);
+    font-size: 1.06rem;
+    line-height: 1.75;
+    color: var(--ink);
+  }
+  .pull cite {
+    display: block;
+    font-family: var(--font-mono);
+    font-style: normal;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    margin-top: 0.6rem;
+  }
+
+  /* ---------- tables ---------- */
+
+  .scroller {
+    overflow-x: auto;
+    margin: 1.5rem 0 2rem;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 46rem;
+    font-size: 0.87rem;
+    line-height: 1.65;
+  }
+  th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td {
+    padding: 0.85rem 0.9rem;
+    vertical-align: top;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 500; }
+  .cost {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .c-lo   { color: var(--ok); }
+  .c-mid  { color: var(--accent); }
+  .c-hi   { color: var(--risk); }
+
+  /* ---------- figures ---------- */
+
+  figure {
+    margin: 2.25rem 0;
+    max-width: var(--wide);
+  }
+  .figbox {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 1.4rem 1.2rem 0.9rem;
+    overflow-x: auto;
+  }
+  figure svg {
+    display: block;
+    width: 100%;
+    min-width: 30rem;
+    max-width: 100%;
+    height: auto;
+    font-family: var(--font-body);
+  }
+  figcaption {
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin-top: 0.85rem;
+    max-width: var(--measure);
+  }
+  .svg-box { fill: var(--surface); stroke: currentColor; stroke-width: 1.1; }
+  .svg-box-2 { fill: var(--surface-2); stroke: currentColor; stroke-width: 1.1; }
+  .svg-t { fill: currentColor; font-size: 12px; }
+  .svg-t-sm { fill: var(--ink-faint); font-size: 10.5px; }
+  .svg-line { stroke: currentColor; stroke-width: 1.1; fill: none; }
+
+  /* ---------- risk cards ---------- */
+
+  .risks { display: flex; flex-direction: column; gap: 1.1rem; margin: 1.75rem 0 0; }
+  .risk {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--risk);
+    border-radius: 2px;
+    padding: 1.15rem 1.3rem;
+  }
+  .risk h4 {
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+    line-height: 1.5;
+  }
+  .risk h4 .tag {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    color: var(--risk);
+    background: var(--risk-wash);
+    padding: 0.15rem 0.45rem;
+    border-radius: 2px;
+    margin-right: 0.6rem;
+    vertical-align: 0.12em;
+    font-weight: 600;
+  }
+  .risk p, .risk ul { max-width: none; font-size: 0.92rem; }
+  .risk p:last-child, .risk ul:last-child { margin-bottom: 0; }
+  .fix {
+    display: block;
+    margin-top: 0.75rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--rule-soft);
+    font-size: 0.9rem;
+  }
+  .fix b {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    color: var(--ok);
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+
+  /* ---------- stages ---------- */
+
+  .stages { display: flex; flex-direction: column; gap: 0; margin: 1.5rem 0 0; }
+  .stage {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr;
+    gap: 1.5rem;
+    padding: 1.6rem 0;
+    border-top: 1px solid var(--rule);
+  }
+  .stage:last-child { border-bottom: 1px solid var(--rule); }
+  .stage-label { display: flex; flex-direction: column; gap: 0.25rem; }
+  .stage-label .sname {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.4;
+  }
+  .stage-label .swhen {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.03em;
+  }
+  .stage-body p:last-child, .stage-body ul:last-child { margin-bottom: 0; }
+  .stage-body ul { max-width: none; }
+  .gate {
+    display: inline-block;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    background: var(--ok-wash);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.45rem 0.75rem;
+  }
+  .gate b {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    color: var(--ok);
+    text-transform: uppercase;
+    margin-right: 0.5rem;
+  }
+
+  @media (max-width: 34rem) {
+    .stage { grid-template-columns: 1fr; gap: 0.75rem; }
+    .sec-head { grid-template-columns: 2.5rem 1fr; }
+  }
+
+  /* ---------- decisions ---------- */
+
+  .decisions { display: grid; gap: 1rem; margin: 1.5rem 0 0; }
+  @media (min-width: 44rem) { .decisions { grid-template-columns: 1fr 1fr; } }
+  .decision {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 1.05rem 1.2rem;
+  }
+  .decision .q {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.98rem;
+    line-height: 1.55;
+    margin: 0 0 0.45rem;
+  }
+  .decision p { max-width: none; font-size: 0.88rem; color: var(--ink-soft); margin: 0; }
+  .decision .why {
+    display: block;
+    margin-top: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+    color: var(--accent);
+  }
+
+  footer {
+    margin-top: 4.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+    max-width: var(--measure);
+  }
+  footer p { max-width: none; }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="kicker">設計検討ノート・v0 / 未確定</div>
+    <h1>GBrain を規制下の社内で<br>再現するための設計</h1>
+    <p class="standfirst">Garry Tan の GBrain（MIT・公開リポジトリ）を実際に読み、「何が効いているのか」を原理まで分解したうえで、Microsoft 365 / Azure の統制下でどこまで同じものが成立するかを詰めた。結論から言うと、価値の大半はインフラではなく運用規律にあり、その部分は承認を待たずに今日から始められる。</p>
+    <div class="meta">
+      <span><b>対象</b> github.com/garrytan/gbrain（MIT）</span>
+      <span><b>読んだもの</b> ソース・設計文書・スキル群</span>
+      <span><b>状態</b> 実装前・意思決定待ち</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2>GBrain の正体 — 検索エンジンではなく、夜通し働く常駐プロセス</h2>
+    </div>
+
+    <p class="lead">GBrain は「Markdown のメモを Postgres に索引する道具」として説明されがちだが、それは一番外側の皮でしかない。実際に効いているのは次の 7 つで、順番に重要度が高い。ここを取り違えると、DB を立てただけで何も compound しないものが出来上がる。</p>
+
+    <h3><span class="h3-num">原理 1</span>正はリポジトリ、DB は捨てられるキャッシュ</h3>
+    <p>Markdown ＋ frontmatter を置いた Git リポジトリが system of record であり、Postgres は派生インデックスに過ぎない。<strong>DB のバックアップを取らない</strong>のが設計上の宣言で、壊れたら <code>sync</code> と <code>extract</code> で全部作り直す。CI がこの不変条件を機械的に検査していて、派生テーブルへ直接書く新規コードは落とされる。</p>
+    <p>この一手で、災害復旧・複数マシン同期（＝ git pull）・ベンダーロックイン回避・監査可能性がまとめて片付く。社内提案の文脈ではこう言い換えられる。<strong>「AI が作った知識資産が、最終的にどこに何の形で残るのか」を情シスに一文で説明できる唯一の構成</strong>である。</p>
+
+    <h3><span class="h3-num">原理 2</span>Thin harness, Fat skills — Markdown が実行可能な手続きになる</h3>
+    <p>スキルは Markdown ファイルで、引数を取るメソッド呼び出しとして振る舞う。同じ <code>/investigate</code> が、渡す対象を変えるだけで医療研究アナリストにも不正調査官にもなる。LLM を回すハーネス側は薄く保ち、ツール定義でコンテキストを食い潰さない。</p>
+    <p>規制環境で効いてくるのは説明責任のほうだ。<strong>「なぜエージェントがそう動いたか」がスタックトレースでも設定スキーマでもなく、人間が読める Markdown 1 枚に書いてある。</strong>監査でそのまま出せる。Garry 自身の CLAUDE.md が 2 万行に膨れて破綻し、200 行のポインタ集に戻したという告白も、そのまま社内ドキュメントの教訓になる。</p>
+    <div class="pull">
+      一度きりの仕事はするな。また必要になる類のことなら、まず 3〜10 件手でやって出力を見せろ。承認されたらスキルファイルに固定しろ。自動で回すべきなら cron に載せろ。<strong>同じことを二度頼まれたら、その時点で失敗だ。</strong>
+      <cite>Garry Tan — 自分の常駐エージェントに与えた運用規律</cite>
+    </div>
+
+    <h3><span class="h3-num">原理 3</span>Latent（判断）と Deterministic（信頼）を混ぜない</h3>
+    <p>読解・統合・パターン認識は LLM 側、数える・並べる・割り当てる・SQL はコード側。「8 人の席順は LLM に組ませられる。800 人を頼むと、もっともらしい嘘の座席表が出てくる」。決定論的な問題を latent 側に押し込んだ瞬間にシステムは壊れる。</p>
+    <p>社内的な意味は明確で、<strong>監査・再現性の対象になるのは deterministic 側だけ</strong>になる。ここを固く作れば審査は通しやすくなるし、逆にここを LLM に任せると「毎回答えが違う業務システム」として突き返される。</p>
+
+    <h3><span class="h3-num">原理 4</span>LLM を一切呼ばない自己配線グラフ（費用対効果が最大）</h3>
+    <p>ページを書き込むたびに正規表現 3 本で <code>[[wiki/people/bob]]</code> 形式と Markdown リンクを拾い、型付きエッジ（<code>works_at</code> / <code>attended</code> / <code>invested_in</code> …）を SQL 一発で一括 INSERT する。<strong>LLM コールもトークンも 0。1.7 万ページで全グラフ抽出が数秒。</strong></p>
+    <p>効果は誇張ではない。240 ページのベンチマークで、グラフ無効時 P@5 が約 18 だったものが <strong>49.1（+31 ポイント）</strong>まで跳ねる。ripgrep/BM25 のみ、ベクトルのみの標準 RAG も同じく約 18 で並ぶ。つまりグラフは「あると良い機能」ではなく<strong>耐力壁</strong>であり、しかもコストがゼロに近い。社内移植で最初に入れるべきはここ。</p>
+
+    <h3><span class="h3-num">原理 5</span>ハイブリッド検索と、スコアではなく「根拠」を返す契約</h3>
+    <p>ベクトル（HNSW）＋ BM25 ＋ RRF 融合 ＋ ソース重み ＋ 意図分類 ＋ クロスエンコーダのリランク ＋ 別名解決を積み上げている。リランカだけで上位 1 位の 6 割が入れ替わる。</p>
+    <p>設計として見習う価値があるのは順位そのものより返り値のほうで、各結果に <code>evidence</code>（なぜ当たったか：別名一致／完全タイトル一致／高ベクトル一致／キーワード一致／弱い意味的一致）と <code>create_safety</code>（そのページはもう存在するか）が付く。<strong>エージェントが生スコアの数字で博打を打たなくて済む。</strong>これは自作する側にとっても真似しやすい契約だ。</p>
+
+    <h3><span class="h3-num">原理 6</span>ページの二層構造 — Compiled Truth と Timeline</h3>
+    <p>すべてのページが上下 2 ゾーンに分かれる。上は <strong>compiled truth</strong>（現時点の要約。証拠が増えるたび書き換える）、下は <strong>timeline</strong>（追記のみ・編集禁止・日付と出典つきの証拠列）。「人物を理解するのに 200 件のログを読ませない。30 秒で状況が分かる 1 段落と、その裏付け」という発想である。</p>
+    <p>さらに知識を 2 層に分ける。<strong>Facts</strong>（熱い記憶＝本人が会話で言ったこと）と <strong>Takes</strong>（冷たい記憶＝誰が何を、どれくらいの確信度で信じているか。<code>take</code>／<code>fact</code>／<code>bet</code>／<code>hunch</code>）。両者は絶対に混ぜず、夜間サイクルの consolidate フェーズだけが一方向に昇格させる。</p>
+    <p>ここが RAG との決定的な差になる。<strong>RAG はチャンクを返す。ブレインは読んで書いた結果を返す。</strong></p>
+
+    <h3><span class="h3-num">原理 7</span>Dream Cycle — 複利を回している本体</h3>
+    <p>毎晩走る保守サイクル（lint → バックリンク修復 → extract → sync → embed → synthesize → consolidate）が、実質的に GBrain の本体である。コスト制御も作り込まれていて、安いモデルで各素材に triage スコアを付けてキャッシュし、閾値でゲートする。<strong>閾値を変えても再判定は LLM 0 コール</strong>で済む。</p>
+    <div class="pull">
+      チャット上でエージェントに頑張らせ続けるより、24 時間動いて取り込み・エンリッチ・統合をやるデーモンを出荷するほうが簡単だ。
+      <cite>GBrain README — 設計思想の核心</cite>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 330" role="img" aria-label="会話のたびに回る同期ループと、同じ脳を夜間に読み直す Dream Cycle の二重ループ図">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+            </marker>
+            <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="var(--accent)"></polygon>
+            </marker>
+          </defs>
+
+          <text class="svg-t-sm" x="24" y="24">会話のたびに 1 周する同期ループ</text>
+
+          <rect class="svg-box" x="24"  y="38" width="140" height="54" rx="2"></rect>
+          <text class="svg-t" x="94"  y="70" text-anchor="middle">信号検知</text>
+          <rect class="svg-box" x="196" y="38" width="140" height="54" rx="2"></rect>
+          <text class="svg-t" x="266" y="63" text-anchor="middle">ブレイン先行</text>
+          <text class="svg-t" x="266" y="80" text-anchor="middle">検索</text>
+          <rect class="svg-box" x="368" y="38" width="140" height="54" rx="2"></rect>
+          <text class="svg-t" x="438" y="70" text-anchor="middle">応答</text>
+          <rect class="svg-box" x="540" y="38" width="140" height="54" rx="2"></rect>
+          <text class="svg-t" x="610" y="70" text-anchor="middle">ページ書き込み</text>
+          <rect class="svg-box" x="712" y="38" width="164" height="54" rx="2"></rect>
+          <text class="svg-t" x="794" y="63" text-anchor="middle">自動リンク</text>
+          <text class="svg-t-sm" x="794" y="80" text-anchor="middle">正規表現 3 本・LLM 0 回</text>
+
+          <line class="svg-line" x1="164" y1="65" x2="190" y2="65" marker-end="url(#ar)"></line>
+          <line class="svg-line" x1="336" y1="65" x2="362" y2="65" marker-end="url(#ar)"></line>
+          <line class="svg-line" x1="508" y1="65" x2="534" y2="65" marker-end="url(#ar)"></line>
+          <line class="svg-line" x1="680" y1="65" x2="706" y2="65" marker-end="url(#ar)"></line>
+
+          <rect class="svg-box-2" x="196" y="196" width="508" height="62" rx="2"></rect>
+          <text class="svg-t" x="450" y="220" text-anchor="middle">脳 ＝ Markdown リポジトリ（正）</text>
+          <text class="svg-t-sm" x="450" y="240" text-anchor="middle">＋ 派生インデックス（ベクトル・全文・グラフ／いつ捨てても再構築できる）</text>
+
+          <polyline class="svg-line" points="290,196 290,150 266,150 266,96" marker-end="url(#ar)"></polyline>
+          <text class="svg-t-sm" x="300" y="146">読む</text>
+
+          <polyline class="svg-line" points="794,92 794,150 610,150 610,192" marker-end="url(#ar)"></polyline>
+          <text class="svg-t-sm" x="622" y="146">書く（本文＋型付きエッジ）</text>
+
+          <path class="svg-line" d="M 660 258 C 660 306, 240 306, 240 262" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#ar-a)"></path>
+          <text class="svg-t" x="450" y="300" text-anchor="middle" fill="var(--accent)">夜間 Dream Cycle</text>
+          <text class="svg-t-sm" x="450" y="320" text-anchor="middle">重複統合・薄いページのエンリッチ・リンク修復・facts → takes 昇格</text>
+        </svg>
+      </div>
+      <figcaption><strong>複利は 2 周目から生まれる。</strong>上の同期ループだけなら「記録を残す検索付きメモ」に過ぎない。同じ脳を夜間にもう一度読み直して圧縮・修復・昇格させる下のループ（オレンジ）があって初めて、翌朝の脳が前日より賢くなる。移植で真っ先に落ちるのはこの下のループで、落とすと何も compound しない。</figcaption>
+    </figure>
+
+    <p class="lead"><strong>ここまでの結論。</strong>GBrain の価値の 8 割は、DB でもモデルでもなく 原理 1・2・3・7 という運用規律にある。これは規制環境でも 100% 再現できるし、Azure の承認を待つ必要もない。手間がかかるのはインフラの一部だけだ。</p>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2>層ごとの写像 — Microsoft 環境に何を割り当てるか</h2>
+    </div>
+
+    <p class="lead">層に分けて見ると、検索とインフラの層は Azure 側にほぼ既製品があり、むしろ楽になる部分すらある。難所は 2 つに集中する。<strong>エージェントをどこで動かすか</strong>と、<strong>アクセス権をどう継承させるか</strong>だ。</p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>GBrain の構成要素</th>
+            <th>原理上の役割</th>
+            <th>Microsoft 環境での実装候補</th>
+            <th>難度</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>脳リポジトリ（Git ＋ Markdown）</td>
+            <td>system of record</td>
+            <td>Azure DevOps Repos（テナント内 Git）が第一候補。差分・レビュー・監査ログが全部ついてくる。SharePoint ドキュメントライブラリでも成立するが、履歴の粒度と機械的な差分で劣る。</td>
+            <td class="cost c-lo">低</td>
+          </tr>
+          <tr>
+            <td>Postgres ＋ pgvector</td>
+            <td>派生インデックス</td>
+            <td>Azure Database for PostgreSQL Flexible Server（pgvector 拡張）で素直に移せる。あるいは <strong>Azure AI Search</strong>：BM25 ＋ ベクトル ＋ RRF 融合 ＋ セマンティックリランクを製品として持っているので、原理 5 の大半が既製品で埋まる。</td>
+            <td class="cost c-lo">低〜中</td>
+          </tr>
+          <tr>
+            <td>埋め込み・LLM</td>
+            <td>latent 層</td>
+            <td>Azure OpenAI（テナント内・学習非利用・Private Endpoint）。規制環境で最も稟議を通しやすい経路。モデル可用性とリージョンは要確認。</td>
+            <td class="cost c-mid">中（申請）</td>
+          </tr>
+          <tr>
+            <td>クロスエンコーダ・リランカ</td>
+            <td>精度</td>
+            <td>Azure AI Search のセマンティックランカーで代替。自前実装の必要なし。</td>
+            <td class="cost c-lo">低</td>
+          </tr>
+          <tr>
+            <td>自己配線グラフ</td>
+            <td>耐力壁（+31 P@5）</td>
+            <td>移植対象ではなく<strong>自作対象</strong>。正規表現数本と <code>edges</code> テーブル 1 枚で足りる。外部依存ゼロ・審査対象ゼロ・LLM コストゼロ。最初に作るべきもの。</td>
+            <td class="cost c-lo">低</td>
+          </tr>
+          <tr>
+            <td>ハーネス（Claude Code / OpenClaw）</td>
+            <td>エージェント実行</td>
+            <td><strong>最大の論点。</strong>端末に何も入れられない前提なら、ハーネスをサーバ側（Container Apps / Functions）に置き、利用者は Teams ボットか社内 Web で話す。これは GBrain の Topology 2（thin client）そのもので、既に想定されている形。</td>
+            <td class="cost c-hi">高</td>
+          </tr>
+          <tr>
+            <td>cron ／ Minions ジョブキュー</td>
+            <td>複利装置</td>
+            <td>Azure Container Apps Jobs（夜間バッチ本体）＋ Functions Timer トリガ（軽い定期処理）。M365 だけしか使えない場合は Power Automate のスケジュールフローが最低線だが、LLM 連携でかなり苦しくなる。</td>
+            <td class="cost c-mid">中</td>
+          </tr>
+          <tr>
+            <td>取り込み（メール・予定・会議）</td>
+            <td>signal</td>
+            <td>Microsoft Graph の delta クエリ ＋ 変更通知（サブスクリプション）で、メール・予定表・Teams 会議トランスクリプト・OneDrive/SharePoint を差分取得。<strong>ただし委任権限で、本人が見えるものだけ</strong>を原則にする（次節）。</td>
+            <td class="cost c-mid">中</td>
+          </tr>
+          <tr>
+            <td>人ごとの OAuth クライアント</td>
+            <td>アクセス制御</td>
+            <td>Entra ID のアプリ登録 ＋ アプリロール ＋ On-Behalf-Of フロー。GBrain 側の <code>--source</code> / <code>--federated-read</code> によるソース分離という発想はそのまま使える。</td>
+            <td class="cost c-hi">高</td>
+          </tr>
+          <tr>
+            <td>Row Level Security</td>
+            <td>越境読み防止</td>
+            <td>PostgreSQL なら RLS をそのまま。Azure AI Search ならセキュリティフィルタ（各ドキュメントに Entra グループの OID 配列を持たせて絞る）。<strong>どちらでも「フィルタを付け忘れたら全部見える」構造にはしないこと。</strong></td>
+            <td class="cost c-mid">中</td>
+          </tr>
+          <tr>
+            <td>provenance・引用・gap 分析</td>
+            <td>説明責任</td>
+            <td>移植ではなく<strong>強化</strong>すべき箇所。「出典のない主張は書かない」「脳が知らないことを明示する」は、規制環境ではむしろ必須要件として通しやすい。Purview 監査ログ ＋ Application Insights と併せる。</td>
+            <td class="cost c-lo">低</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><em>注：</em>Azure / Graph 側の各サービスの可用性・権限名・リージョン制約は変わるため、稟議に出す前に最新の公式ドキュメントで裏を取ること。ここでは構成の当たりを付けるところまで。</p>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <h2>そのままでは効かない — 規制環境固有の 6 つの落とし穴</h2>
+    </div>
+
+    <p class="lead">ここが一番重要なパート。GBrain は「一人の人間の脳」として設計されていて、その前提が社内では成り立たない。技術的に動くものを作った後で気づくと、全部作り直しになる種類の問題を先に並べる。</p>
+
+    <div class="risks">
+
+      <div class="risk">
+        <h4><span class="tag">最重要</span>アクセス権が派生物に継承されない</h4>
+        <p>SharePoint の限定サイトや個人メールから取り込んだ内容が、Markdown ページになった瞬間に元の権限を失う。「A さんの人事メールから作られた人物ページが、B さんの検索でヒットする」が普通に起きる。これは Copilot 導入時に各社が踏んだ oversharing 問題と同じ構造で、<strong>後から権限を付け直すことは原理的にできない</strong>（どの文の出所がどれか、もう分からなくなっている）。</p>
+        <span class="fix"><b>設計原則</b>権限は<strong>取り込みの瞬間に確定させ、検索時に必ず適用する</strong>。全ページに <code>acl</code>（Entra グループ OID の配列）を必須フィールドにし、複数ソースから合成したページの権限は<strong>積集合＝最も狭い方</strong>を採る。取り込み経路は委任権限（本人が見えるものだけ）から始め、アプリケーション権限（テナント全体）は Stage 2 まで使わない。</span>
+      </div>
+
+      <div class="risk">
+        <h4><span class="tag">法務</span>人物ページは従業員プロファイリングになる</h4>
+        <p>GBrain の person ページのテンプレートには <code>## Assessment</code> という欄が実在し、公式ドキュメントの例文はこうだ ——「鋭い技術リーダー。社内では過小評価されている。<strong>燃え尽きの兆候に注意</strong>」。投資先の創業者に対してなら有効な機能だが、<strong>社内の同僚に対して同じものを自動生成した瞬間に、労務・個人情報の問題に変わる</strong>。人事評価への転用、本人非開示、利用目的外利用のどれもが論点になる。</p>
+        <span class="fix"><b>設計原則</b>社内の人物ページは「業務上の事実 ＋ 出典」だけに絞る（役割・担当・直近のやりとり・未クローズの依頼）。評価・推測・性格・健康・将来予測の欄は<strong>スキーマから物理的に削る</strong>——「書かない運用にする」では必ず漏れる。そのうえで人事・法務レビューを Stage 1 の着手前に通す。ここを飛ばすと、動いてから全部止まる。</span>
+      </div>
+
+      <div class="risk">
+        <h4><span class="tag">Purview</span>秘密度ラベルと DLP が派生物に付かない</h4>
+        <p>ラベル付き文書を Markdown に落とした時点でラベルは消え、埋め込みベクトルにも当然付かない。しかも「ベクトルなら中身は分からないから安全」は成り立たない——埋め込みからの原文復元は現実的な攻撃として知られている。索引そのものを保護対象として扱う必要がある。</p>
+        <span class="fix"><b>設計原則</b>ラベルを frontmatter に持ち上げて派生物に運ぶ。<strong>ラベルごとにインデックスとストレージを分ける</strong>（社外秘以上は別コンテナ・別キー・別接続）。ラベル未判定の素材は取り込まない（fail-closed）。</span>
+      </div>
+
+      <div class="risk">
+        <h4><span class="tag">削除</span>「忘却」の設計と削除請求が正面から矛盾する</h4>
+        <p>GBrain の <code>forget</code> は削除ではない。該当行に取り消し線を引き、<code>valid_until</code> と理由を刻んで<strong>監査履歴として残す</strong>設計になっている。個人データの削除請求・退職者データ・誤取り込みへの対応としては、これは使えない。逆に、保持ポリシーや eDiscovery ホールドがかかった領域から取り込んだページは勝手に消せない、という反対方向の制約も同時に効いてくる。</p>
+        <span class="fix"><b>設計原則</b>論理的な「忘却」とは別に、<strong>ハードデリート経路を最初から設計に含める</strong>。Git 履歴からの除去（履歴書き換え）、索引からの削除、埋め込みの再構築までを 1 つの手順書にする。同時に、取り込み元ごとに「消せる／消せない」を frontmatter に持たせて区別する。</span>
+      </div>
+
+      <div class="risk">
+        <h4><span class="tag">実行環境</span>エージェントを動かす場所がない</h4>
+        <p>統制端末では任意の OSS・npm・ランタイムを入れられず、外向き通信も塞がっているのが普通。GBrain の想定する「手元の CLI ＋ ローカル DB」は成立しない。</p>
+        <span class="fix"><b>設計原則</b>ハーネスはサーバ側（Azure）に置き、利用者は Teams ボットか社内 Web から話す。端末には何も入れない。これは GBrain 自身の Topology 2（thin client：エージェントの機械にはローカル DB を持たず、すべて host 側で処理）そのもので、<strong>移植先の制約に元設計が既に対応している</strong>数少ない領域。</span>
+      </div>
+
+      <div class="risk">
+        <h4><span class="tag">調達</span>本体の持ち込み審査より、原理の移植のほうが速い</h4>
+        <p>gbrain 本体は TypeScript ＋ Bun、ソース 3,000 ファイル規模、依存も多い。SBOM・脆弱性・ライセンス・サプライチェーンの審査コストは相当に高く、しかも通ったところで Microsoft 環境向けの取り込み経路と権限モデルは自分で書くことになる。</p>
+        <span class="fix"><b>設計原則</b>まず<strong>読んで原理を移植する</strong>。特に効き目の大きい 原理 4（自己配線グラフ）は正規表現数本と SQL 1 本、原理 6（二層ページ）はスキーマの取り決めに過ぎない。動くものが出来て価値が実証できてから、必要なら本体導入を審査に回す——順序が逆だと、審査待ちのまま何も学べない期間が数か月続く。</span>
+      </div>
+
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 880 290" role="img" aria-label="取り込み時に権限を刻む場合と刻まない場合の比較。違いは取り込みの1か所だけで、そこを飛ばすと後段で取り返せない">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="currentColor"></polygon>
+            </marker>
+            <marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="var(--risk)"></polygon>
+            </marker>
+            <marker id="ar-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="var(--ok)"></polygon>
+            </marker>
+          </defs>
+
+          <text class="svg-t" x="16" y="22" fill="var(--risk)">A ── 取り込み時に権限を刻まない</text>
+
+          <rect class="svg-box" x="16"  y="34" width="150" height="56" rx="2"></rect>
+          <text class="svg-t" x="91"  y="57" text-anchor="middle">元データ</text>
+          <text class="svg-t-sm" x="91" y="75" text-anchor="middle">権限：経営会議グループ</text>
+
+          <rect class="svg-box" x="222" y="34" width="150" height="56" rx="2"></rect>
+          <text class="svg-t" x="297" y="57" text-anchor="middle">派生ページ</text>
+          <text class="svg-t-sm" x="297" y="75" text-anchor="middle">権限情報なし</text>
+
+          <rect class="svg-box" x="428" y="34" width="150" height="56" rx="2"></rect>
+          <text class="svg-t" x="503" y="57" text-anchor="middle">索引・ベクトル</text>
+          <text class="svg-t-sm" x="503" y="75" text-anchor="middle">絞る手がかりなし</text>
+
+          <rect class="svg-box" x="634" y="34" width="176" height="56" rx="2" stroke="var(--risk)" stroke-width="1.6"></rect>
+          <text class="svg-t" x="722" y="57" text-anchor="middle" fill="var(--risk)">別部署の人にヒット</text>
+          <text class="svg-t-sm" x="722" y="75" text-anchor="middle">越境</text>
+
+          <line class="svg-line" x1="166" y1="62" x2="216" y2="62" stroke="var(--risk)" marker-end="url(#ar-r)"></line>
+          <text class="svg-t-sm" x="191" y="52" text-anchor="middle">取り込み</text>
+          <line class="svg-line" x1="372" y1="62" x2="422" y2="62" stroke="var(--risk)" marker-end="url(#ar-r)"></line>
+          <line class="svg-line" x1="578" y1="62" x2="628" y2="62" stroke="var(--risk)" marker-end="url(#ar-r)"></line>
+          <text class="svg-t-sm" x="603" y="52" text-anchor="middle">検索</text>
+
+          <line x1="16" y1="128" x2="864" y2="128" stroke="currentColor" stroke-width="0.8" opacity="0.25"></line>
+
+          <text class="svg-t" x="16" y="164" fill="var(--ok)">B ── 取り込みの瞬間に acl を刻む</text>
+
+          <rect class="svg-box" x="16"  y="176" width="150" height="56" rx="2"></rect>
+          <text class="svg-t" x="91"  y="199" text-anchor="middle">元データ</text>
+          <text class="svg-t-sm" x="91" y="217" text-anchor="middle">権限：経営会議グループ</text>
+
+          <rect class="svg-box" x="222" y="176" width="150" height="56" rx="2" stroke="var(--ok)" stroke-width="1.6"></rect>
+          <text class="svg-t" x="297" y="199" text-anchor="middle">派生ページ</text>
+          <text class="svg-t-sm" x="297" y="217" text-anchor="middle">acl: [group-oid]</text>
+
+          <rect class="svg-box" x="428" y="176" width="150" height="56" rx="2"></rect>
+          <text class="svg-t" x="503" y="199" text-anchor="middle">索引・ベクトル</text>
+          <text class="svg-t-sm" x="503" y="217" text-anchor="middle">acl フィールド保持</text>
+
+          <rect class="svg-box" x="634" y="176" width="176" height="56" rx="2"></rect>
+          <text class="svg-t" x="722" y="199" text-anchor="middle">フィルタ必須</text>
+          <text class="svg-t-sm" x="722" y="217" text-anchor="middle">権限のない人には出ない</text>
+
+          <line class="svg-line" x1="166" y1="204" x2="216" y2="204" stroke="var(--ok)" marker-end="url(#ar-o)"></line>
+          <text class="svg-t-sm" x="191" y="194" text-anchor="middle">取り込み</text>
+          <line class="svg-line" x1="372" y1="204" x2="422" y2="204" marker-end="url(#ar2)"></line>
+          <line class="svg-line" x1="578" y1="204" x2="628" y2="204" marker-end="url(#ar2)"></line>
+          <text class="svg-t-sm" x="603" y="194" text-anchor="middle">検索</text>
+
+          <text class="svg-t-sm" x="297" y="262" text-anchor="middle" fill="var(--ok)">↑ 違いはこの 1 か所だけ</text>
+        </svg>
+      </div>
+      <figcaption><strong>2 つの経路の差は、取り込みの瞬間に元データの権限主体をページに刻むかどうか、それだけ。</strong>刻まずに進むと、後段のどこにも取り返す場所がない——索引にも埋め込みにも、その情報がもう存在しないからだ。だから <code>acl</code> はスキーマの必須フィールドにする（省略可能にした瞬間に、必ず省略されたページが混ざる）。</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <h2>段階設計 — 承認を待たずに始められるところから</h2>
+    </div>
+
+    <p class="lead">Stage 0 を今週始めることを勧める。技術選定も稟議も待たない。理由は 01 の結論そのままで、<strong>価値の 8 割が運用規律にあり、そこはツールなしで始められる</strong>から。そして Stage 0 の成果物（Markdown の脳とスキルファイル群）は、最終的にどの技術構成を選んでも 100% そのまま使える。それが「正はリポジトリ」という設計の本当の意味だ。</p>
+
+    <div class="stages">
+
+      <div class="stage">
+        <div class="stage-label">
+          <span class="sname">Stage 0<br>一人ぶんの脳</span>
+          <span class="swhen">2〜4 週間・承認ほぼ不要</span>
+        </div>
+        <div class="stage-body">
+          <ul>
+            <li><strong>置き場</strong>：自分の OneDrive か個人リポジトリに Markdown。それだけ。DB もベクトルも要らない。</li>
+            <li><strong>スキーマは 6 型で始める</strong>：person / company / meeting / concept / decision / note。GBrain の 15 型は 15 万ページ規模で必要になったもので、最初から真似する必要はない。</li>
+            <li><strong>ページ構造だけは最初から守る</strong>：上に compiled truth、<code>&lt;!-- timeline --&gt;</code> より下に日付＋出典の追記のみ。ここが後から直すのが一番つらい部分。</li>
+            <li><strong>人物ページは業務事実のみ</strong>（03 の 2 番目）。この時点で評価欄を作らないと、癖として残る。</li>
+            <li><strong>検索は既存の grep で十分</strong>。先に「書く規律」を作る。</li>
+            <li><strong>二度やった作業は Markdown のスキルに固定する</strong>。会議メモの整形、週次まとめ、人物ページの更新手順——この資産が Stage 1 以降の中身になる。</li>
+          </ul>
+          <span class="gate"><b>判定</b>4 週間後、「自分の脳に聞いたほうが速い」場面が週 3 回以上出るか。出なければ Stage 1 に進んでも同じ結果になる。</span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-label">
+          <span class="sname">Stage 1<br>チームの脳</span>
+          <span class="swhen">1〜2 か月・Azure 申請あり</span>
+        </div>
+        <div class="stage-body">
+          <ul>
+            <li><strong>着手前に人事・法務レビュー</strong>（03 の 2 番目）。ここが Stage 1 のゲートで、技術ではない。</li>
+            <li>Azure OpenAI（埋め込み ＋ 生成）を申請。索引は Azure AI Search か PostgreSQL Flexible Server ＋ pgvector。</li>
+            <li><strong>自己配線グラフを実装</strong>（原理 4）。ここで検索品質が跳ねる。LLM コストはかからない。</li>
+            <li>Microsoft Graph の delta でメール・予定・Teams 議事録を取り込み。<strong>委任権限のみ</strong>——各人が自分に見えるものだけを自分の脳に入れる。この制約が、そのまま 03 の 1 番目の回避策になっている。</li>
+            <li>全ページに <code>acl</code> 必須。検索クエリはフィルタ必須（フィルタなしで呼べる経路を残さない）。</li>
+            <li><strong>夜間 Dream Cycle</strong> を Container Apps Jobs で。ここを飛ばすと Stage 0 の延長にしかならない。</li>
+            <li>問い合わせ口は Teams ボット。端末には何も入れない。</li>
+          </ul>
+          <span class="gate"><b>判定</b>チーム内で「先に脳に聞く」が既定動作になるか。ならなければ、UI ではなく取り込みの網羅性を疑う。</span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-label">
+          <span class="sname">Stage 2<br>全社</span>
+          <span class="swhen">Stage 1 の実績が出てから</span>
+        </div>
+        <div class="stage-body">
+          <ul>
+            <li>Entra アプリロール ＋ On-Behalf-Of で、利用者ごとの可視範囲を認可基盤側に寄せる。</li>
+            <li>秘密度ラベル別のインデックス分離、Purview 監査ログ連携。</li>
+            <li>ハードデリート運用手順の整備と、実際に消せることの訓練（03 の 4 番目）。</li>
+            <li>ソース分割（共有 wiki／顧客／社内限定）と越境読みの拒否をデータ層で強制。</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <h2>次に決めること</h2>
+    </div>
+
+    <p class="lead">以下 4 つで構成が大きく分岐する。Stage 0 はどれが決まっていなくても始められるので、走らせながら詰めればいい。</p>
+
+    <div class="decisions">
+      <div class="decision">
+        <p class="q">実行基盤はどこまで使えるか</p>
+        <p>Azure サブスクリプション（Container Apps / Functions）が取れるのか、M365 と Power Platform だけなのか、あるいは統制端末のローカルだけなのか。</p>
+        <span class="why">→ Dream Cycle を回せるかどうかが決まる = 複利が回るかどうか</span>
+      </div>
+      <div class="decision">
+        <p class="q">LLM はどれを通せるか</p>
+        <p>Azure OpenAI が申請可能か、M365 Copilot しかないか、現時点では何もないか。Copilot だけの場合、埋め込みと夜間バッチの設計が根本から変わる。</p>
+        <span class="why">→ latent 層の置き場所、およびコスト構造</span>
+      </div>
+      <div class="decision">
+        <p class="q">最初のスコープは個人かチームか</p>
+        <p>個人ブレインなら権限問題（03 の 1 番目）は「自分が見えるものだけ」で自動的に回避される。最初からチームにすると、認可設計が最初の月の主題になる。</p>
+        <span class="why">→ 最初の 1 か月で認可設計をやるかどうか</span>
+      </div>
+      <div class="decision">
+        <p class="q">Graph で何を取り込んでよいか</p>
+        <p>メール・予定・Teams 会議トランスクリプトへのアクセスが、情シスと法務の観点で許容されるか。特に会議の文字起こしは、参加者の同意まわりの扱いが会社ごとに違う。</p>
+        <span class="why">→ 取り込みの網羅性 = 脳の実用性そのもの</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>この文書は GBrain のソースと設計文書を読んだうえでの原理分析と、Microsoft 環境への写像案。実装は未着手。Azure および Microsoft Graph の各サービスの可用性・権限名・制約は変わるため、稟議前に公式ドキュメントで裏取りすること。人事・法務レビューは Stage 1 着手の前提条件。</p>
+  </footer>
+
+</div>
