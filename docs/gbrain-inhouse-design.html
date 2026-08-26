@@ -429,13 +429,14 @@
 <div class="page">
 
   <header class="masthead">
-    <div class="kicker">設計検討ノート・v0 / 未確定</div>
+    <div class="kicker">設計ノート・v1 / 前提確定</div>
     <h1>GBrain を規制下の社内で<br>再現するための設計</h1>
     <p class="standfirst">Garry Tan の GBrain（MIT・公開リポジトリ）を実際に読み、「何が効いているのか」を原理まで分解したうえで、Microsoft 365 / Azure の統制下でどこまで同じものが成立するかを詰めた。結論から言うと、価値の大半はインフラではなく運用規律にあり、その部分は承認を待たずに今日から始められる。</p>
     <div class="meta">
       <span><b>対象</b> github.com/garrytan/gbrain（MIT）</span>
-      <span><b>読んだもの</b> ソース・設計文書・スキル群</span>
-      <span><b>状態</b> 実装前・意思決定待ち</span>
+      <span><b>前提</b> Azure サブスクリプションあり・Azure OpenAI 申請可</span>
+      <span><b>初期スコープ</b> 自分 1 人の個人ブレイン</span>
+      <span><b>状態</b> 実装前</span>
     </div>
   </header>
 
@@ -544,6 +545,8 @@
 
     <p class="lead">層に分けて見ると、検索とインフラの層は Azure 側にほぼ既製品があり、むしろ楽になる部分すらある。難所は 2 つに集中する。<strong>エージェントをどこで動かすか</strong>と、<strong>アクセス権をどう継承させるか</strong>だ。</p>
 
+    <p>Azure サブスクリプションと Azure OpenAI が使える前提が立ち、初期スコープが自分 1 人と決まったので、候補はほぼ一本に絞れる。下表の<strong>太字が採用案</strong>。ひとつだけ、当初 PostgreSQL ＋ pgvector を推していた索引層は<strong>結論が変わった</strong>——日本語という条件を入れると答えが逆転する（次の見出しで説明する）。</p>
+
     <div class="scroller">
       <table>
         <thead>
@@ -558,62 +561,62 @@
           <tr>
             <td>脳リポジトリ（Git ＋ Markdown）</td>
             <td>system of record</td>
-            <td>Azure DevOps Repos（テナント内 Git）が第一候補。差分・レビュー・監査ログが全部ついてくる。SharePoint ドキュメントライブラリでも成立するが、履歴の粒度と機械的な差分で劣る。</td>
+            <td><strong>Azure DevOps Repos（テナント内 Git）</strong>。差分・レビュー・監査ログが全部ついてくる。SharePoint ドキュメントライブラリでも成立するが、履歴の粒度と機械的な差分で劣る。</td>
             <td class="cost c-lo">低</td>
           </tr>
           <tr>
-            <td>Postgres ＋ pgvector</td>
             <td>派生インデックス</td>
-            <td>Azure Database for PostgreSQL Flexible Server（pgvector 拡張）で素直に移せる。あるいは <strong>Azure AI Search</strong>：BM25 ＋ ベクトル ＋ RRF 融合 ＋ セマンティックリランクを製品として持っているので、原理 5 の大半が既製品で埋まる。</td>
+            <td>検索の土台</td>
+            <td><strong>Azure AI Search</strong>。日本語アナライザ（<code>ja.microsoft</code> 等）が標準で、BM25 ＋ ベクトル ＋ RRF 融合 ＋ セマンティックランカーも製品機能。PostgreSQL ＋ pgvector は安く自由度も高いが、<strong>日本語の全文検索アームが標準では成立しない</strong>のが致命的（次項）。</td>
             <td class="cost c-lo">低〜中</td>
           </tr>
           <tr>
             <td>埋め込み・LLM</td>
             <td>latent 層</td>
-            <td>Azure OpenAI（テナント内・学習非利用・Private Endpoint）。規制環境で最も稟議を通しやすい経路。モデル可用性とリージョンは要確認。</td>
+            <td><strong>Azure OpenAI</strong>（テナント内・学習非利用・Private Endpoint）。埋め込みと生成の両方を 1 経路で通せる。モデル可用性とリージョンは申請時に要確認。</td>
             <td class="cost c-mid">中（申請）</td>
           </tr>
           <tr>
             <td>クロスエンコーダ・リランカ</td>
-            <td>精度</td>
-            <td>Azure AI Search のセマンティックランカーで代替。自前実装の必要なし。</td>
+            <td>精度（上位 1 位の 6 割が入れ替わる）</td>
+            <td><strong>Azure AI Search のセマンティックランカー</strong>で代替。自前実装は不要。索引に AI Search を採る決め手のひとつ。</td>
             <td class="cost c-lo">低</td>
           </tr>
           <tr>
             <td>自己配線グラフ</td>
             <td>耐力壁（+31 P@5）</td>
-            <td>移植対象ではなく<strong>自作対象</strong>。正規表現数本と <code>edges</code> テーブル 1 枚で足りる。外部依存ゼロ・審査対象ゼロ・LLM コストゼロ。最初に作るべきもの。</td>
+            <td>移植対象ではなく<strong>自作対象</strong>。正規表現数本でリンクを拾い、各ドキュメントに <code>linked_slugs</code> 配列として持たせ、<strong>2 パス検索でグラフ拡張</strong>（1 回目のヒットの隣接を 2 回目で引く）。GBrain 自身の graph augment と同じ方式なので、AI Search でも原理を落とさずに再現できる。</td>
             <td class="cost c-lo">低</td>
           </tr>
           <tr>
             <td>ハーネス（Claude Code / OpenClaw）</td>
             <td>エージェント実行</td>
-            <td><strong>最大の論点。</strong>端末に何も入れられない前提なら、ハーネスをサーバ側（Container Apps / Functions）に置き、利用者は Teams ボットか社内 Web で話す。これは GBrain の Topology 2（thin client）そのもので、既に想定されている形。</td>
-            <td class="cost c-hi">高</td>
+            <td><strong>Azure Container Apps</strong> に常駐させ、利用者は Teams ボットか社内 Web で話す。端末には何も入れない。これは GBrain の Topology 2（thin client）そのもので、元設計が既に想定している形。</td>
+            <td class="cost c-mid">中</td>
           </tr>
           <tr>
             <td>cron ／ Minions ジョブキュー</td>
             <td>複利装置</td>
-            <td>Azure Container Apps Jobs（夜間バッチ本体）＋ Functions Timer トリガ（軽い定期処理）。M365 だけしか使えない場合は Power Automate のスケジュールフローが最低線だが、LLM 連携でかなり苦しくなる。</td>
+            <td><strong>Azure Container Apps Jobs</strong>（夜間 Dream Cycle 本体。LLM の長時間処理を素直に扱える）＋ Functions Timer トリガ（軽い定期処理）。</td>
             <td class="cost c-mid">中</td>
           </tr>
           <tr>
-            <td>取り込み（メール・予定・会議）</td>
+            <td>取り込み（4 系統）</td>
             <td>signal</td>
-            <td>Microsoft Graph の delta クエリ ＋ 変更通知（サブスクリプション）で、メール・予定表・Teams 会議トランスクリプト・OneDrive/SharePoint を差分取得。<strong>ただし委任権限で、本人が見えるものだけ</strong>を原則にする（次節）。</td>
+            <td>Microsoft Graph の delta クエリで <strong>予定表 → メール → OneDrive/SharePoint 文書</strong> の順に。<strong>Teams 会議トランスクリプトだけは委任権限で取れない</strong>ため経路が別（05 参照）。個人ブレインの間は委任権限のみ＝本人が見えるものだけ。</td>
             <td class="cost c-mid">中</td>
           </tr>
           <tr>
-            <td>人ごとの OAuth クライアント</td>
-            <td>アクセス制御</td>
-            <td>Entra ID のアプリ登録 ＋ アプリロール ＋ On-Behalf-Of フロー。GBrain 側の <code>--source</code> / <code>--federated-read</code> によるソース分離という発想はそのまま使える。</td>
+            <td>バックグラウンドの Graph 認証</td>
+            <td>夜間ジョブが「自分の権限」で動く</td>
+            <td>認証コードフローで取得した refresh token を <strong>Key Vault</strong> に置き、ジョブが更新のたびに書き戻す。<strong>条件付きアクセス（MFA 頻度・準拠デバイス要求）に弾かれやすい最有力の詰まりどころ</strong>——着手前に情シスへ確認する。</td>
             <td class="cost c-hi">高</td>
           </tr>
           <tr>
-            <td>Row Level Security</td>
-            <td>越境読み防止</td>
-            <td>PostgreSQL なら RLS をそのまま。Azure AI Search ならセキュリティフィルタ（各ドキュメントに Entra グループの OID 配列を持たせて絞る）。<strong>どちらでも「フィルタを付け忘れたら全部見える」構造にはしないこと。</strong></td>
-            <td class="cost c-mid">中</td>
+            <td>人ごとの OAuth クライアント／RLS</td>
+            <td>アクセス制御</td>
+            <td>Stage 2 送り。個人ブレインの間は不要だが、<strong>全ページの <code>acl</code> フィールドと秘密度ラベルは Stage 0 から持っておく</strong>（後から付け直せないため）。将来は Entra アプリロール ＋ On-Behalf-Of ＋ AI Search のセキュリティフィルタ。</td>
+            <td class="cost c-hi">高（後回し可）</td>
           </tr>
           <tr>
             <td>provenance・引用・gap 分析</td>
@@ -625,7 +628,17 @@
       </table>
     </div>
 
-    <p><em>注：</em>Azure / Graph 側の各サービスの可用性・権限名・リージョン制約は変わるため、稟議に出す前に最新の公式ドキュメントで裏を取ること。ここでは構成の当たりを付けるところまで。</p>
+    <h3>索引層だけは、日本語という条件で結論が逆転する</h3>
+
+    <p>純粋に GBrain の原理を写すだけなら PostgreSQL ＋ pgvector が有利だ。エッジをテーブルに持てば <code>JOIN</code> でグラフを歩けるし、RRF も SQL で書ける。コストも桁違いに安い。実際、脳の中身が英語ならこちらを勧める。</p>
+
+    <p>ところが<strong>脳の中身が日本語主体になると前提が崩れる</strong>。PostgreSQL の全文検索は日本語を分かち書きできない——標準では日本語用の text search configuration が存在しない。GBrain 自身も <code>GBRAIN_FTS_LANGUAGE</code> で言語を切り替えられるようにしているが、選べるのは Postgres が持っている構成だけで、日本語はその中にない。つまり<strong>ハイブリッド検索の BM25 アームが丸ごと死ぬ</strong>。原理 5 の「ベクトルが意味の隣に流れたときにキーワードが拾い直す」という補完関係が成立しなくなる。</p>
+
+    <p>回避策はある（<code>pg_bigm</code> による 2-gram、<code>pg_trgm</code> による 3-gram）が、前者はマネージド環境での可用性を確認する必要があり、後者は日本語では精度が落ちる。一方 <strong>Azure AI Search は日本語アナライザを標準で持ち、セマンティックランカーも日本語に対応している</strong>。ここで天秤が傾く。</p>
+
+    <p>失うのは <code>JOIN</code> による多段グラフ探索だが、これは代替できる。GBrain 自身の検索パイプラインでもグラフ拡張は<strong>2 パス方式</strong>（1 回目のヒット集合の隣接ページを 2 回目で引く）として実装されていて、深い再帰探索ではない。各ドキュメントに <code>linked_slugs</code> 配列を持たせておけば、AI Search でも同じことが 2 クエリでできる。<strong>耐力壁は落とさずに済む。</strong></p>
+
+    <p><em>注：</em>Azure / Graph 側の各サービスの可用性・権限名・リージョン制約・拡張機能のサポート状況は変わるため、稟議に出す前に最新の公式ドキュメントで裏を取ること。ここでは構成の当たりを付けるところまで。</p>
   </section>
 
   <section>
@@ -754,58 +767,62 @@
       <h2>段階設計 — 承認を待たずに始められるところから</h2>
     </div>
 
-    <p class="lead">Stage 0 を今週始めることを勧める。技術選定も稟議も待たない。理由は 01 の結論そのままで、<strong>価値の 8 割が運用規律にあり、そこはツールなしで始められる</strong>から。そして Stage 0 の成果物（Markdown の脳とスキルファイル群）は、最終的にどの技術構成を選んでも 100% そのまま使える。それが「正はリポジトリ」という設計の本当の意味だ。</p>
+    <p class="lead">Azure が使える見込みが立った今でも、<strong>Stage 0 を今週始めることを勧める</strong>。理由は 01 の結論そのままで、価値の 8 割が運用規律にあり、そこは Azure OpenAI の申請結果を待たずに始められるから。そして Stage 0 の成果物（Markdown の脳とスキルファイル群）は、最終的にどの技術構成を選んでも 100% そのまま使える。それが「正はリポジトリ」という設計の本当の意味だ。申請と Stage 0 は並走させる。</p>
 
     <div class="stages">
 
       <div class="stage">
         <div class="stage-label">
           <span class="sname">Stage 0<br>一人ぶんの脳</span>
-          <span class="swhen">2〜4 週間・承認ほぼ不要</span>
+          <span class="swhen">2〜4 週間・承認不要・並走で申請</span>
         </div>
         <div class="stage-body">
           <ul>
-            <li><strong>置き場</strong>：自分の OneDrive か個人リポジトリに Markdown。それだけ。DB もベクトルも要らない。</li>
+            <li><strong>置き場</strong>：Azure DevOps に個人リポジトリを 1 本。Markdown だけ。DB もベクトルも要らない。</li>
             <li><strong>スキーマは 6 型で始める</strong>：person / company / meeting / concept / decision / note。GBrain の 15 型は 15 万ページ規模で必要になったもので、最初から真似する必要はない。</li>
             <li><strong>ページ構造だけは最初から守る</strong>：上に compiled truth、<code>&lt;!-- timeline --&gt;</code> より下に日付＋出典の追記のみ。ここが後から直すのが一番つらい部分。</li>
+            <li><strong>frontmatter に <code>acl</code> と <code>label</code> を最初から必須にする</strong>。今は誰も読まないが、Stage 2 で付け直すことは原理的にできない（03 の 1・3 番目）。</li>
             <li><strong>人物ページは業務事実のみ</strong>（03 の 2 番目）。この時点で評価欄を作らないと、癖として残る。</li>
             <li><strong>検索は既存の grep で十分</strong>。先に「書く規律」を作る。</li>
             <li><strong>二度やった作業は Markdown のスキルに固定する</strong>。会議メモの整形、週次まとめ、人物ページの更新手順——この資産が Stage 1 以降の中身になる。</li>
           </ul>
+          <p><strong>並走させること：</strong>Azure OpenAI の申請、そして情シスへの 2 つの確認（条件付きアクセス下でバックグラウンドの Graph 更新が通るか／Teams トランスクリプトの扱い）。どちらも Stage 1 の律速になる。</p>
           <span class="gate"><b>判定</b>4 週間後、「自分の脳に聞いたほうが速い」場面が週 3 回以上出るか。出なければ Stage 1 に進んでも同じ結果になる。</span>
         </div>
       </div>
 
       <div class="stage">
         <div class="stage-label">
-          <span class="sname">Stage 1<br>チームの脳</span>
-          <span class="swhen">1〜2 か月・Azure 申請あり</span>
+          <span class="sname">Stage 1<br>自分の脳を自動で回す</span>
+          <span class="swhen">1〜2 か月・自分 1 人のまま</span>
         </div>
         <div class="stage-body">
+          <p>ここはまだチームに広げない。<strong>自分 1 人のまま、取り込みと夜間サイクルを自動化する</strong>のが Stage 1 の目的。委任権限で自分に見えるものしか入らないので、03 の 1 番目（権限継承）が構造的に回避される——この安全地帯にいる間に、原理 4・6・7 を動かして価値を実証する。</p>
           <ul>
-            <li><strong>着手前に人事・法務レビュー</strong>（03 の 2 番目）。ここが Stage 1 のゲートで、技術ではない。</li>
-            <li>Azure OpenAI（埋め込み ＋ 生成）を申請。索引は Azure AI Search か PostgreSQL Flexible Server ＋ pgvector。</li>
-            <li><strong>自己配線グラフを実装</strong>（原理 4）。ここで検索品質が跳ねる。LLM コストはかからない。</li>
-            <li>Microsoft Graph の delta でメール・予定・Teams 議事録を取り込み。<strong>委任権限のみ</strong>——各人が自分に見えるものだけを自分の脳に入れる。この制約が、そのまま 03 の 1 番目の回避策になっている。</li>
-            <li>全ページに <code>acl</code> 必須。検索クエリはフィルタ必須（フィルタなしで呼べる経路を残さない）。</li>
-            <li><strong>夜間 Dream Cycle</strong> を Container Apps Jobs で。ここを飛ばすと Stage 0 の延長にしかならない。</li>
-            <li>問い合わせ口は Teams ボット。端末には何も入れない。</li>
+            <li>Azure AI Search に索引を作る（日本語アナライザ ＋ ベクトル ＋ セマンティックランカー）。埋め込みと生成は Azure OpenAI。</li>
+            <li><strong>自己配線グラフを実装</strong>（原理 4）。リンク抽出 ＋ <code>linked_slugs</code> ＋ 2 パス拡張。ここで検索品質が跳ねる。LLM コストはかからないので、最初に作る。</li>
+            <li>Graph delta で取り込み。<strong>予定表 → メール → OneDrive/SharePoint 文書</strong> の順（実装が軽く効果が大きい順）。Teams トランスクリプトは 05 の経路で別途。</li>
+            <li>認証は Key Vault の refresh token 方式。<strong>ここが最初に詰まる</strong>ので、Stage 0 のうちに情シス確認を済ませておく。</li>
+            <li><strong>夜間 Dream Cycle</strong> を Container Apps Jobs で。ここを飛ばすと Stage 0 の延長にしかならない。安いモデルの triage スコアでゲートするコスト制御も最初から入れる。</li>
+            <li>問い合わせ口は自分専用の Teams ボット。端末には何も入れない。</li>
           </ul>
-          <span class="gate"><b>判定</b>チーム内で「先に脳に聞く」が既定動作になるか。ならなければ、UI ではなく取り込みの網羅性を疑う。</span>
+          <span class="gate"><b>判定</b>朝いちばんに脳のほうから何か出てくるか（前夜の統合結果、今日の予定に紐づく文脈）。「聞けば答える」で止まっているなら、まだ Dream Cycle が効いていない。</span>
         </div>
       </div>
 
       <div class="stage">
         <div class="stage-label">
-          <span class="sname">Stage 2<br>全社</span>
+          <span class="sname">Stage 2<br>チームへ広げる</span>
           <span class="swhen">Stage 1 の実績が出てから</span>
         </div>
         <div class="stage-body">
+          <p><strong>ここで初めて権限設計が主題になる。</strong>他人が自分の検索結果を見る瞬間に、Stage 1 の安全地帯は終わる。技術より先に、<strong>人事・法務レビュー</strong>（03 の 2 番目）を通すのがこの段階のゲート。</p>
           <ul>
             <li>Entra アプリロール ＋ On-Behalf-Of で、利用者ごとの可視範囲を認可基盤側に寄せる。</li>
-            <li>秘密度ラベル別のインデックス分離、Purview 監査ログ連携。</li>
-            <li>ハードデリート運用手順の整備と、実際に消せることの訓練（03 の 4 番目）。</li>
+            <li>AI Search のセキュリティフィルタを<strong>必須</strong>に。フィルタなしで検索を呼べる経路をコード上に残さない。</li>
+            <li>秘密度ラベル別のインデックス分離（03 の 3 番目）。Stage 0 から <code>label</code> を刻んでいれば、ここは分けるだけで済む。</li>
             <li>ソース分割（共有 wiki／顧客／社内限定）と越境読みの拒否をデータ層で強制。</li>
+            <li>ハードデリート運用手順の整備と、実際に消せることの訓練（03 の 4 番目）。Purview 監査ログ連携もここ。</li>
           </ul>
         </div>
       </div>
@@ -816,37 +833,37 @@
   <section>
     <div class="sec-head">
       <span class="sec-num">05</span>
-      <h2>次に決めること</h2>
+      <h2>決まったこと、まだ潰れていない 3 つ</h2>
     </div>
 
-    <p class="lead">以下 4 つで構成が大きく分岐する。Stage 0 はどれが決まっていなくても始められるので、走らせながら詰めればいい。</p>
+    <p class="lead">前提が 4 つとも固まったので、構成の分岐はほぼ閉じた。<strong>Azure サブスクリプションあり／Azure OpenAI 申請可／初期スコープは自分 1 人／取り込みは予定表・メール・Teams トランスクリプト・OneDrive 文書の 4 系統。</strong>残るのは、動かしてみないと分からない 3 点だけ。どれも Stage 0 と並走で潰せる。</p>
 
     <div class="decisions">
       <div class="decision">
-        <p class="q">実行基盤はどこまで使えるか</p>
-        <p>Azure サブスクリプション（Container Apps / Functions）が取れるのか、M365 と Power Platform だけなのか、あるいは統制端末のローカルだけなのか。</p>
-        <span class="why">→ Dream Cycle を回せるかどうかが決まる = 複利が回るかどうか</span>
+        <p class="q">Teams トランスクリプトだけ、経路が違う</p>
+        <p>Graph の会議トランスクリプト API は<strong>アプリケーション権限</strong>が前提で、テナント管理者の同意とアクセスポリシー設定が要る。委任権限では取れないため、<strong>「自分 1 人で始める」が唯一できない取り込み源</strong>になる。現実的な第一歩は、会議の録画・文字起こしが OneDrive／SharePoint に残る性質を使って <code>Files.Read</code>（委任）で <code>.vtt</code> を拾う経路。テナント設定次第なので、まず 1 件手で辿って確かめる。</p>
+        <span class="why">→ 4 系統のうち 3 系統は自力で進む。ここだけ情シス案件</span>
       </div>
       <div class="decision">
-        <p class="q">LLM はどれを通せるか</p>
-        <p>Azure OpenAI が申請可能か、M365 Copilot しかないか、現時点では何もないか。Copilot だけの場合、埋め込みと夜間バッチの設計が根本から変わる。</p>
-        <span class="why">→ latent 層の置き場所、およびコスト構造</span>
+        <p class="q">夜間ジョブが自分の権限で Graph を叩けるか</p>
+        <p>委任権限のバックグラウンド実行は refresh token の維持で成立するが、条件付きアクセス（MFA 頻度、準拠デバイス要求、セッション制御）がかかっていると更新が弾かれることがある。<strong>Stage 1 で最初に詰まる確率が一番高い場所。</strong>Stage 0 のうちに、小さなスクリプトで「翌日も無人でトークンが更新できるか」だけ実測しておく。</p>
+        <span class="why">→ ここが通らないと Dream Cycle が無人で回らない</span>
       </div>
       <div class="decision">
-        <p class="q">最初のスコープは個人かチームか</p>
-        <p>個人ブレインなら権限問題（03 の 1 番目）は「自分が見えるものだけ」で自動的に回避される。最初からチームにすると、認可設計が最初の月の主題になる。</p>
-        <span class="why">→ 最初の 1 か月で認可設計をやるかどうか</span>
+        <p class="q">日本語で検索品質が本当に出るか</p>
+        <p>AI Search の日本語アナライザとセマンティックランカーを選んだのは机上の理由なので、実測で裏を取る。<strong>Stage 0 で溜まった数百ページを索引に入れ、自分が実際に投げたい質問を 20 本用意して P@5 を手で数える</strong>だけでいい。GBrain 自身がグラフなしで約 18、ありで 49.1 という数字を出しているので、比較の目盛りは既にある。</p>
+        <span class="why">→ 索引層の選択を早期に検証できる。外れても Stage 1 の中で差し替えられる</span>
       </div>
       <div class="decision">
-        <p class="q">Graph で何を取り込んでよいか</p>
-        <p>メール・予定・Teams 会議トランスクリプトへのアクセスが、情シスと法務の観点で許容されるか。特に会議の文字起こしは、参加者の同意まわりの扱いが会社ごとに違う。</p>
-        <span class="why">→ 取り込みの網羅性 = 脳の実用性そのもの</span>
+        <p class="q">この 3 つに共通する性質</p>
+        <p>いずれも<strong>調べても答えが出ず、小さく試せば 1 日で分かる</strong>類のもの。稟議や設計会議で潰そうとすると数週間かかるが、Stage 0 の片手間で実測すれば片付く。設計をこれ以上机上で進める価値は低い——<strong>次の一手は、書き始めることと、この 3 つの実測。</strong></p>
+        <span class="why">→ 設計フェーズはここで終わってよい</span>
       </div>
     </div>
   </section>
 
   <footer>
-    <p>この文書は GBrain のソースと設計文書を読んだうえでの原理分析と、Microsoft 環境への写像案。実装は未着手。Azure および Microsoft Graph の各サービスの可用性・権限名・制約は変わるため、稟議前に公式ドキュメントで裏取りすること。人事・法務レビューは Stage 1 着手の前提条件。</p>
+    <p>この文書は GBrain のソースと設計文書を読んだうえでの原理分析と、Microsoft 環境への写像案。実装は未着手。Azure および Microsoft Graph の各サービスの可用性・権限名・制約・拡張機能のサポート状況は変わるため、稟議前に公式ドキュメントで裏取りすること。人事・法務レビューは Stage 2（チーム展開）着手の前提条件で、Stage 0・1 は自分 1 人の範囲に閉じている。</p>
   </footer>
 
 </div>
