@@ -1,0 +1,499 @@
+<title>gbrain 起動ランブック</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700;900&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #eceef2;
+    --surface:     #fbfcfd;
+    --surface-2:   #e3e7ee;
+    --code-bg:     #1b1f27;
+    --code-fg:     #dfe4ec;
+    --ink:         #14171e;
+    --ink-soft:    #4e5666;
+    --ink-faint:   #79808f;
+    --rule:        #ccd2dc;
+    --rule-soft:   #dde1e8;
+    --accent:      #8a6a1f;
+    --risk:        #9c3f33;
+    --risk-wash:   #9c3f3314;
+    --ok:          #2f6b52;
+    --ok-wash:     #2f6b5214;
+
+    --font-display: "Zen Old Mincho", "Yu Mincho", "Hiragino Mincho ProN", Georgia, serif;
+    --font-body:    "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --measure: 42rem;
+    --wide: 60rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #12151b;
+      --surface:   #1a1e26;
+      --surface-2: #232833;
+      --code-bg:   #0c0e13;
+      --code-fg:   #d5dae4;
+      --ink:       #e4e7ee;
+      --ink-soft:  #98a1b2;
+      --ink-faint: #6f7889;
+      --rule:      #2f3641;
+      --rule-soft: #262c36;
+      --accent:    #d8ad4e;
+      --risk:      #e0806f;
+      --risk-wash: #e0806f1a;
+      --ok:        #6fbf99;
+      --ok-wash:   #6fbf991a;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:    #12151b;
+    --surface:   #1a1e26;
+    --surface-2: #232833;
+    --code-bg:   #0c0e13;
+    --code-fg:   #d5dae4;
+    --ink:       #e4e7ee;
+    --ink-soft:  #98a1b2;
+    --ink-faint: #6f7889;
+    --rule:      #2f3641;
+    --rule-soft: #262c36;
+    --accent:    #d8ad4e;
+    --risk:      #e0806f;
+    --risk-wash: #e0806f1a;
+    --ok:        #6fbf99;
+    --ok-wash:   #6fbf991a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.85;
+    font-feature-settings: "palt" 1;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+  }
+
+  .page { max-width: var(--wide); margin: 0 auto; }
+
+  .masthead {
+    padding: 4rem 0 2rem;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .masthead h1 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(2rem, 5vw, 3rem);
+    line-height: 1.3;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .standfirst { max-width: var(--measure); color: var(--ink-soft); margin: 0; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.75rem;
+    font-family: var(--font-mono); font-size: 0.72rem;
+    color: var(--ink-faint); letter-spacing: 0.03em;
+  }
+  .meta b { color: var(--ink-soft); font-weight: 600; }
+
+  p { max-width: var(--measure); margin: 0 0 1rem; }
+  ul, ol { max-width: var(--measure); margin: 0 0 1.1rem; padding-left: 1.2rem; }
+  li { margin-bottom: 0.35rem; }
+  li::marker { color: var(--ink-faint); }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+  strong { font-weight: 700; }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--surface-2);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.75;
+    padding: 1rem 1.15rem;
+    border-radius: 3px;
+    overflow-x: auto;
+    margin: 0 0 1.1rem;
+    max-width: var(--wide);
+  }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+  pre .c { color: #8d97a8; }
+
+  /* ---------- phases ---------- */
+
+  .phase {
+    padding-top: 3.25rem;
+  }
+  .phase-head {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr;
+    align-items: baseline;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 0.6rem;
+    margin-bottom: 1.5rem;
+  }
+  .phase-num {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
+  .phase-head h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.3rem, 2.8vw, 1.75rem);
+    line-height: 1.45;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .phase-head .when {
+    grid-column: 2;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.06rem;
+    line-height: 1.55;
+    margin: 2.1rem 0 0.6rem;
+    text-wrap: balance;
+  }
+  h3 .step {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    margin-right: 0.55rem;
+    font-weight: 600;
+  }
+
+  .check {
+    background: var(--ok-wash);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--ok);
+    border-radius: 2px;
+    padding: 0.9rem 1.15rem;
+    margin: 1.4rem 0 0;
+    max-width: var(--measure);
+  }
+  .check b {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ok);
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  .check p { margin: 0; max-width: none; font-size: 0.94rem; }
+
+  .trap {
+    background: var(--risk-wash);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--risk);
+    border-radius: 2px;
+    padding: 0.9rem 1.15rem;
+    margin: 1.2rem 0;
+    max-width: var(--measure);
+  }
+  .trap b {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--risk);
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  .trap p, .trap ul { margin: 0; max-width: none; font-size: 0.94rem; }
+  .trap p + p { margin-top: 0.5rem; }
+
+  .scroller {
+    overflow-x: auto;
+    margin: 1.3rem 0 1.75rem;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+  }
+  table { border-collapse: collapse; width: 100%; min-width: 38rem; font-size: 0.86rem; line-height: 1.65; }
+  th {
+    text-align: left; font-family: var(--font-mono); font-size: 0.66rem;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint);
+    font-weight: 600; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  td { padding: 0.75rem 0.85rem; vertical-align: top; border-bottom: 1px solid var(--rule-soft); }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--font-mono); font-size: 0.8rem; white-space: nowrap; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.82rem; color: var(--ink-faint); max-width: var(--measure);
+  }
+  footer p { max-width: none; }
+
+  @media (max-width: 34rem) {
+    .phase-head { grid-template-columns: 1fr; }
+    .phase-head .when { grid-column: 1; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="kicker">道 1 ／ gbrain 本体をそのまま動かす</div>
+    <h1>gbrain 起動ランブック</h1>
+    <p class="standfirst">原理を移植する前に、本物を動かして何が効くのかを体感するための手順。<strong>最重要の検証（日本語で検索品質が出るか）は Phase 1 で終わり、そこまで Neon も Railway も要らない。</strong>クラウドに手を出すのは、ローカルで手応えが出てからでいい。</p>
+    <div class="meta">
+      <span><b>前提</b> Cloudflare / Neon / Railway / Resend ＋ 追加で API キー 2 本</span>
+      <span><b>Phase 0–1</b> ローカルのみ・45 分</span>
+      <span><b>Phase 2–3</b> クラウド・2〜3 時間</span>
+    </div>
+  </header>
+
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">事前</span>
+      <h2>用意するもの</h2>
+    </div>
+
+    <p>4 サービスのうち、Phase 0–1 では<strong>ひとつも使わない</strong>。必要なのは Bun とキー 2 本だけ。</p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr><th>もの</th><th>用途</th><th>Phase</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Bun</td><td>gbrain のランタイム。<code>curl -fsSL https://bun.sh/install | bash</code></td><td>0 —</td></tr>
+          <tr><td>VOYAGE_API_KEY</td><td>埋め込み（<code>voyage-4</code>）＋ リランカ（<code>rerank-2.5</code>）。<strong>1 本で両方まかなえる</strong>のでこれが第一候補</td><td>1 —</td></tr>
+          <tr><td>ANTHROPIC_API_KEY</td><td>fact 抽出・synthesize・クエリ拡張。夜間サイクルの中身</td><td>1 —</td></tr>
+          <tr><td>Neon</td><td>派生インデックス（PGLite からの載せ替え先）</td><td>2 —</td></tr>
+          <tr><td>Railway</td><td>常駐 ＋ 夜間 Dream Cycle</td><td>3 —</td></tr>
+          <tr><td>Cloudflare / Resend</td><td>取り込み口と朝のブリーフィング</td><td>次回</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="trap">
+      <b>訂正</b>
+      <p>前回「Cloudflare Workers AI の <code>bge-m3</code> で埋め込みを賄える」と書いたが、<strong>gbrain のネイティブ埋め込みプロバイダに Cloudflare は入っていない</strong>（Voyage / OpenAI / OpenRouter / Gemini / Azure OpenAI / MiniMax / DashScope / Zhipu / Ollama / llama-server / LiteLLM）。<code>OPENAI_BASE_URL</code> で OpenAI 互換ゲートウェイに向けられるので CF の互換エンドポイント経由で通る可能性はあるが、初回に賭ける場所ではない。</p>
+      <p>bge-m3 が活きるのは、原理だけ自作する道 2 のほう。道 1 では Voyage で始める。</p>
+    </div>
+
+    <div class="trap">
+      <b>入れる中身の線引き</b>
+      <p>個人環境で試す以上、投入するのは<strong>私用のメモか、業務を模したダミー</strong>に限ること。社内のメールや文書を個人の Neon / Railway に置いた時点で、検証の是非以前に規程の問題になる。ここで測りたいのは仕組みの挙動であって、実データが載るかどうかではない。日本語で 50〜200 ページあれば品質は十分に測れる。</p>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">Phase 0</span>
+      <h2>ローカルで動かす</h2>
+      <span class="when">15 分・キーもクラウドも不要</span>
+    </div>
+
+    <p>gbrain は<strong>キーゼロでも起動する</strong>（キーワード検索と、エージェントが自分で書いたメモリだけが動く）。まずここまでを最短で通して、壊れていないことを確認する。</p>
+
+    <h3><span class="step">0-1</span>インストール</h3>
+
+<pre><code>curl -fsSL https://bun.sh/install | bash
+bun install -g github:garrytan/gbrain#latest-stable</code></pre>
+
+    <div class="trap">
+      <b>最初の罠</b>
+      <p><strong><code>npm install -g gbrain</code> は絶対に実行しない。</strong>npm 上の <code>gbrain</code> はこのプロジェクトとは無関係の別パッケージで、PATH 上で本物を覆い隠す。入れてしまったら <code>npm uninstall -g gbrain</code> してから GitHub 経由で入れ直す（<code>gbrain doctor</code> はこの状態を検出して直し方を出す）。</p>
+      <p><code>bun install -g</code> が postinstall で失敗する環境では、確実な代替がある：<code>git clone https://github.com/garrytan/gbrain.git ~/gbrain &amp;&amp; cd ~/gbrain &amp;&amp; bun install &amp;&amp; bun link</code></p>
+    </div>
+
+    <h3><span class="step">0-2</span>脳を作る</h3>
+
+<pre><code>gbrain init --pglite   <span class="c"># 2 秒。サーバも Docker も要らない</span>
+gbrain doctor          <span class="c"># 全チェックが ok になること</span></code></pre>
+
+    <p><code>--pglite</code> は Postgres 17 を WASM で埋め込んだ組み込みエンジン。<strong>本物の Postgres と同じ SQL・同じ全文検索の制約を持つ</strong>ので、Phase 1 の日本語検証はここで正しく測れる。</p>
+
+    <h3><span class="step">0-3</span>往復を確かめる</h3>
+
+<pre><code>gbrain capture "個人検証を Phase 0 から始めることにした。理由は日本語の検索品質がローカルで測り切れるから。"
+gbrain search "日本語 検索"
+gbrain stats</code></pre>
+
+    <div class="check">
+      <b>Checkpoint 0</b>
+      <p><code>gbrain doctor</code> が全項目 ok、<code>gbrain search</code> がいま書いたページを返す。ここまで 15 分。<strong>通らなければ先に進まない</strong>——Neon も Railway も、この土台の上にしか乗らない。</p>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">Phase 1</span>
+      <h2>日本語で品質を測る — ここが本題</h2>
+      <span class="when">30 分・まだローカルのみ</span>
+    </div>
+
+    <p>設計ノート 05 で残した「日本語で検索品質が本当に出るか」を、ここで潰す。<strong>PGLite は本物の Postgres なので、Neon に載せても答えは変わらない。</strong>クラウドに一銭も払う前に結論が出る。</p>
+
+    <h3><span class="step">1-1</span>キーを入れる</h3>
+
+<pre><code>export VOYAGE_API_KEY=pa-...
+export ANTHROPIC_API_KEY=sk-ant-...</code></pre>
+
+    <div class="trap">
+      <b>キーの置き場所を間違えない</b>
+      <p><strong><code>gbrain config set</code> で API キーを設定してはいけない。</strong>そちらは DB 側の設定面に書き込まれ、<strong>埋め込みパイプラインは読まない</strong>。キーは環境変数か <code>~/.gbrain/config.json</code>（ファイル面）に置く。ドキュメントが明示的に警告している罠で、静かに失敗するので気づきにくい。</p>
+      <p>常駐デーモンに移すときはさらに別で、<code>~/.gbrain/env</code>（0600、<code>gbrain autopilot --install</code> が作る）に置く。対話シェルの rc ファイルはデーモンのシェルには届かない。</p>
+    </div>
+
+    <h3><span class="step">1-2</span>日本語の素材を入れて全部立てる</h3>
+
+<pre><code>gbrain import ~/notes          <span class="c"># 私用の md を 50〜200 枚</span>
+gbrain embed --all             <span class="c"># ベクトル</span>
+gbrain extract all             <span class="c"># ★ グラフ。これが +31 P@5 の正体</span>
+gbrain stats</code></pre>
+
+    <p><code>extract all</code> を飛ばさないこと。リンクとタイムラインからグラフを張る工程で、LLM を一切呼ばないのに検索品質を最も大きく動かす。</p>
+
+    <h3><span class="step">1-3</span>質問 20 本で数える</h3>
+
+    <p>自分が実際に投げたい日本語の質問を 20 本用意して、3 つの入口を比べる。</p>
+
+<pre><code>gbrain search "..."            <span class="c"># 生の検索（ハイブリッド、LLM コストなし）</span>
+gbrain query  "..."            <span class="c"># 拡張つきのフル制御版</span>
+gbrain think  "..."            <span class="c"># 引用つきの合成回答 ＋ 不足の明示</span></code></pre>
+
+    <p>外した質問は、当てずっぽうで直さずに理由を出させる。</p>
+
+<pre><code>gbrain search "..." --explain                    <span class="c"># どの層が効いたか／各ブーストの寄与</span>
+gbrain search diagnose "..." --target &lt;slug&gt;     <span class="c"># なぜそのページが出なかったか</span></code></pre>
+
+    <h3><span class="step">1-4</span>何が起きるはずか（先に仮説を置く）</h3>
+
+    <p>PostgreSQL の全文検索は日本語を語に割れない。<code>GBRAIN_FTS_LANGUAGE</code> は既定で <code>english</code> だが、これを何に変えても日本語用の構成は Postgres 側に存在しない。<strong>つまりハイブリッド検索の BM25 アームは、日本語ではほぼ機能しないはず。</strong></p>
+
+    <p>したがって測りたいのは「全体として何点か」ではなく、こちらの問いになる：</p>
+
+    <p><strong>キーワード側が死んだ状態で、ベクトル ＋ グラフ ＋ リランカ ＋ タイトル/別名ブーストだけで実用に足りるか。</strong></p>
+
+    <p>足りるなら、社内でも PostgreSQL 系で通せる目が出る（AI Search 一択ではなくなる）。足りないなら、設計ノート 06 の 2-gram 方式を自作するか、素直に AI Search の日本語アナライザに頼る——どちらを選ぶかが、ここの実測で決まる。</p>
+
+    <div class="check">
+      <b>Checkpoint 1 — このランブックで一番重要</b>
+      <p>20 本のうち何本が上位 5 件に正解を含んだか、数字で書き留める。<code>--explain</code> の出力から、<strong>キーワードアームが実際に何回貢献したか</strong>も控える。この 2 つの数字が、社内設計で AI Search に倒した判断を検証する材料になる。</p>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">Phase 2</span>
+      <h2>Neon に載せ替える</h2>
+      <span class="when">30 分・ここで原理 1 を実体験する</span>
+    </div>
+
+    <p>Neon でプロジェクトを作り、<strong>プーラー経由ではない直結の接続文字列</strong>を取る（マイグレーションと DDL が通る必要がある）。</p>
+
+    <h3><span class="step">2-1</span>移行コマンドを使わず、作り直す</h3>
+
+    <p><code>gbrain migrate --to supabase</code> という移行コマンドは存在するが、<strong>あえて使わない。</strong>脳リポジトリが正で DB は捨てられるキャッシュ、という原理 1 が本当かどうかを、最初の移行で自分の手で確かめる価値がある。</p>
+
+<pre><code>export GBRAIN_HOME=~/.gbrain-neon      <span class="c"># 既存の PGLite 脳は残したまま別の脳を作る</span>
+gbrain init --url "postgresql://...neon.tech/neondb?sslmode=require"
+gbrain doctor
+gbrain import ~/notes
+gbrain embed --all
+gbrain extract all
+gbrain stats                           <span class="c"># Phase 1 と件数が一致すること</span></code></pre>
+
+    <p>Markdown から丸ごと再構築できて、件数も検索結果も一致する——これが確認できたら、原理 1 は自分の環境で証明されたことになる。以後「DB のバックアップ」という発想を捨てられる。</p>
+
+    <div class="trap">
+      <b>ここで詰まるなら</b>
+      <p>gbrain の v35 マイグレーションは <code>CREATE EVENT TRIGGER</code>（Neon は <code>neon_superuser</code> 経由で対応済み）に加えて <strong><code>BYPASSRLS</code> も要求する</strong>。<code>gbrain doctor</code> がここで落ちたら、<strong>Railway の Postgres に切り替える</strong>——自前コンテナなので superuser がある。判定は 2 分、粘る価値はない。</p>
+      <p>そもそもこの自動 RLS は、Supabase が anon キーで <code>public</code> スキーマを公開してしまう事情への対策。Neon にも Railway にもその露出はないので、機能として失うものはない。</p>
+    </div>
+
+    <div class="check">
+      <b>Checkpoint 2</b>
+      <p><code>gbrain doctor</code> が Neon（または Railway Postgres）で全部 ok。<code>gbrain stats</code> の件数が Phase 1 と一致。Phase 1 の質問 20 本を投げ直して、同じ答えが返る。</p>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">Phase 3</span>
+      <h2>Railway で夜間サイクルを回す</h2>
+      <span class="when">1〜2 時間・複利がここから始まる</span>
+    </div>
+
+    <p>ここまでは「聞けば答える」道具でしかない。<strong>Dream Cycle が回って初めて、翌朝の脳が前日より賢くなる。</strong>設計ノート 01 の下側のループがこれ。</p>
+
+    <h3><span class="step">3-1</span>まずローカルで 1 周させる</h3>
+
+<pre><code>gbrain dream --dry-run --json    <span class="c"># 何が起きるか</span>
+gbrain dream --json              <span class="c"># 本番 1 周</span></code></pre>
+
+    <p>出力の <code>details.synthesis</code> を読む。安いモデルの triage スコアで足切りされた件数と、実際に合成されたページ数が出る。ここでコスト感を掴んでから常駐させる。</p>
+
+    <h3><span class="step">3-2</span>Railway に置く</h3>
+
+    <p>リポジトリに Dockerfile は同梱されていないので、Bun のビルドパックか自前 Dockerfile で。環境変数はローカルと同じ 3 つ（<code>GBRAIN_DATABASE_URL</code> / <code>VOYAGE_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>）に <code>GBRAIN_HOME</code> を加える。</p>
+
+    <ul>
+      <li><strong>cron</strong>：毎晩 <code>gbrain dream</code>。これが本体。</li>
+      <li><strong>常駐ワーカー</strong>：重い処理を投げるようになったら <code>gbrain jobs supervisor</code>。リポジトリの <code>docs/guides/minions-deployment-snippets/Procfile</code> がそのまま使える（Render / Railway / Heroku 共通）。</li>
+      <li><strong>脳リポジトリの同期</strong>：起動時に private リポジトリを clone して <code>gbrain sync</code>。書き戻しは <code>gbrain sources push</code>。</li>
+    </ul>
+
+    <div class="check">
+      <b>Checkpoint 3</b>
+      <p>翌朝、<code>gbrain dream --json</code> のログに synthesize されたページが残っている。そのページを <code>gbrain think</code> で引けて、引用元が辿れる。<strong>ここが Stage 0 の合格ライン</strong>——設計ノート 05 の「夜間サイクルが無人で回るか」が、条件付きアクセスの部分を除いて潰れる。</p>
+    </div>
+  </section>
+
+  <section class="phase">
+    <div class="phase-head">
+      <span class="phase-num">次回</span>
+      <h2>Cloudflare と Resend</h2>
+    </div>
+
+    <p>取り込み口（Resend Inbound → Cloudflare Worker → <code>/ingest</code>）と朝のブリーフィング配信は Phase 4 として分ける。<strong>Phase 3 まで動いてからでいい</strong>——取り込みを自動化しても、脳が答えを返さなければ意味がないので。</p>
+
+    <p>途中で全体の設計に戻りたくなったら、<a href="https://claude.ai/code/artifact/d77f4bdc-be0c-4c18-b7f3-076350820581">設計ノート</a>の 05（残る検証項目）と 06（個人環境の割り当て）が対になっている。</p>
+  </section>
+
+  <footer>
+    <p>コマンドと制約は gbrain リポジトリの <code>README.md</code> / <code>docs/INSTALL.md</code> / <code>docs/ENGINES.md</code> / <code>docs/integrations/embedding-providers.md</code> / <code>docs/guides/minions-deployment.md</code> を実際に読んで確認したもの。gbrain は活発に更新されているため、詰まったらまず <code>gbrain doctor</code>、次に <code>gbrain bootstrap verify</code>（インストール契約を丸ごと検証して非ゼロ終了する）を走らせること。</p>
+  </footer>
+
+</div>
