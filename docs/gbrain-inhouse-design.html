@@ -862,6 +862,110 @@
     </div>
   </section>
 
+  <section>
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <h2>個人環境で先に潰す — Cloudflare / Neon / Railway / Resend</h2>
+    </div>
+
+    <p class="lead">Azure OpenAI の申請と情シス確認を待つ間、同じ形を個人環境にそっくり組める。しかも<strong>審査がないぶん、gbrain 本体をそのまま動かせる</strong>——原理を移植する前に、本物が何をしてくれるのかを体感できる。05 で残した 3 つの未検証項目のうち、2 つはここで潰せる。</p>
+
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>層</th>
+            <th>社内（Azure）</th>
+            <th>個人検証環境</th>
+            <th>備考</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>正 ＝ 脳リポジトリ</td>
+            <td>Azure DevOps Repos</td>
+            <td><strong>GitHub（private）</strong></td>
+            <td>そのまま。原理 1 は環境を選ばない。</td>
+          </tr>
+          <tr>
+            <td>派生インデックス</td>
+            <td>Azure AI Search</td>
+            <td><strong>Neon</strong>（Postgres ＋ pgvector）</td>
+            <td>gbrain の PostgresEngine がそのまま乗る。日本語全文検索だけ一手間（下記）。</td>
+          </tr>
+          <tr>
+            <td>埋め込み</td>
+            <td>Azure OpenAI</td>
+            <td><strong>Cloudflare Workers AI</strong> <code>@cf/baai/bge-m3</code></td>
+            <td>100 言語以上・8,192 トークン。日本語の埋め込みはこれで足りるので、申請を待たずに始められる。</td>
+          </tr>
+          <tr>
+            <td>生成・合成</td>
+            <td>Azure OpenAI</td>
+            <td>Claude API（別途キーが要る）</td>
+            <td>4 サービスに含まれない唯一の追加要素。夜間サイクルの synthesize と think に使う。</td>
+          </tr>
+          <tr>
+            <td>ハーネス常駐</td>
+            <td>Container Apps</td>
+            <td><strong>Railway</strong></td>
+            <td><code>gbrain serve</code> を置く。</td>
+          </tr>
+          <tr>
+            <td>夜間 Dream Cycle</td>
+            <td>Container Apps Jobs</td>
+            <td><strong>Railway の cron</strong></td>
+            <td><code>gbrain dream</code> を毎晩。ここが複利の本体。</td>
+          </tr>
+          <tr>
+            <td>取り込み口</td>
+            <td>Microsoft Graph delta</td>
+            <td><strong>Resend Inbound</strong> ＋ Cloudflare Worker</td>
+            <td><code>email.received</code> webhook が本文と添付をパース済みで飛んでくる。<strong>「転送したら脳に入る」</strong>が数十行。</td>
+          </tr>
+          <tr>
+            <td>UI・認証</td>
+            <td>Teams ボット ＋ Entra</td>
+            <td>Cloudflare Pages ＋ <strong>Access</strong></td>
+            <td>自分だけに絞った private な問い合わせ画面。</td>
+          </tr>
+          <tr>
+            <td>出力</td>
+            <td>Teams 通知</td>
+            <td><strong>Resend</strong>（朝のブリーフィング）</td>
+            <td>毎朝メールが届くことが Stage 0 の合格ライン。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>実物で確認した 4 点</h3>
+
+    <ul>
+      <li><strong>Neon は event trigger をサポートしている</strong>（<code>neon_superuser</code> ロール経由）。gbrain の v35 マイグレーションがこれを要求するので、当初の懸念は消えた。ただし同じマイグレーションは <code>BYPASSRLS</code> も要求する——初回の <code>gbrain doctor</code> でここに弾かれたら、素直に <strong>Railway の Postgres</strong>（自前コンテナなので superuser がある）に逃げる。2 分で分かる。</li>
+      <li><strong>Workers AI に <code>@cf/baai/bge-m3</code> がある。</strong>多言語・長文脈の埋め込みモデルなので、日本語の脳でも埋め込み層が成立する。Azure OpenAI の申請結果を待つ理由がひとつ消える。</li>
+      <li><strong>Resend には Inbound がある。</strong>受信ドメイン宛のメールをパースして <code>email.received</code> webhook で投げてくれる。社内の Graph delta の代役として、<strong>取り込みパイプラインの形だけ先に検証できる</strong>のが大きい。</li>
+      <li><strong>Neon の拡張は allow-list で、<code>pg_bigm</code> も <code>pgroonga</code> も入っていない。</strong>02 で見た日本語全文検索の問題がここでも出る。</li>
+    </ul>
+
+    <h3>日本語全文検索は、拡張を待たずにアプリ側で解ける</h3>
+
+    <p>やることは単純で、<strong>本文を 2-gram に割ってから <code>to_tsvector('simple', ...)</code> に入れる</strong>だけ。「議事録」なら「議事 事録」という具合に分解した影の列を作って索引し、クエリ側も同じ規則で割る。<code>pg_bigm</code> が拡張の中でやっていることを、外でやる。</p>
+
+    <p>この実装は捨てにならない。<strong>Azure に戻すときもそのまま使える</strong>ので、「AI Search を使わず PostgreSQL Flexible Server で通す」という選択肢を社内設計に残せる。02 で AI Search に倒した判断を、実測で再検討できる状態にしておけるということ。</p>
+
+    <h3>週末の最小構成</h3>
+
+    <ol>
+      <li>GitHub に脳リポジトリ、Neon に DB、Railway に gbrain。<code>gbrain init</code> → <code>gbrain capture "…"</code> が通るまで。</li>
+      <li>Resend に受信ドメインを 1 本。Cloudflare Worker で受けて <code>/ingest</code> に流す。自分宛のメールを何通か転送してみる。</li>
+      <li>Railway の cron に <code>gbrain dream</code> を毎晩。</li>
+      <li>朝、Resend で自分にブリーフィングを送る。<strong>これが届いた朝が Stage 0 の合格ライン。</strong></li>
+    </ol>
+
+    <p>ここまでで、05 の未検証項目のうち <strong>「日本語で検索品質が出るか」は完全に潰せる</strong>——むしろ Neon のほうが条件が厳しいので、ここで通れば AI Search では確実に通る。<strong>「夜間サイクルが無人で回るか」も形は潰せる</strong>（条件付きアクセスとの衝突だけは社内でしか試せない）。残る Teams トランスクリプトだけが持ち越しになる。</p>
+  </section>
+
   <footer>
     <p>この文書は GBrain のソースと設計文書を読んだうえでの原理分析と、Microsoft 環境への写像案。実装は未着手。Azure および Microsoft Graph の各サービスの可用性・権限名・制約・拡張機能のサポート状況は変わるため、稟議前に公式ドキュメントで裏取りすること。人事・法務レビューは Stage 2（チーム展開）着手の前提条件で、Stage 0・1 は自分 1 人の範囲に閉じている。</p>
   </footer>
